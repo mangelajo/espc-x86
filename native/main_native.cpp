@@ -15,6 +15,8 @@
 #include "computer.h"
 #include "setup.h"
 
+#include "host/sdcard.h"
+
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -79,6 +81,8 @@ int main(int argc, char *argv[]) {
     printf("Base dir:  %s\n\n", baseDir);
 
     // Create and configure the computer
+    sdcard_mount(SD_MOUNT_PATH);
+
     computer = new Computer();
     computer->setBaseDirectory(baseDir);
 

@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cerrno>
+#include <sys/stat.h>
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PS2Device (base class)
@@ -480,10 +482,23 @@ void BTGamepadDriver::parseHID(const uint8_t *, size_t) {}
 #include "host/unzip.h"
 
 int sdcard_mount(const char *mount_point) {
-    printf("[native] sdcard_mount(%s) - using native filesystem\n", mount_point);
+    printf("[native] sdcard_mount(%s) - creating native SD directory\n", mount_point);
+
+    struct stat st = {};
+    if (stat(mount_point, &st) == -1) {
+        if (mkdir(mount_point, 0775) != 0) {
+            printf("[native] ERROR: Could not create SD directory %s (errno: %d)\n", mount_point, errno);
+            return SDCARD_ERROR;
+        }
+        printf("[native] Created SD card directory: %s\n", mount_point);
+    }
+
+    return SDCARD_OK;
+}
+int sdcard_umount() {
+    printf("[native] sdcard_umount() - keeping SD directory intact\n");
     return 0;
 }
-int sdcard_umount() { return 0; }
 
 Settings::Settings(Computer *computer) : m_computer(computer) {}
 void Settings::show() { printf("[native] Settings::show() - not available\n"); }
@@ -495,7 +510,29 @@ int snapshot(uint16_t width, uint16_t height, uint8_t *src, const char *path) {
     return 0;
 }
 
-int vfs_fat_create_image(char *, const char *, bool) { return -1; }
+int vfs_fat_create_image(char *img_filename, const char *mount_point, bool floppy) {
+    size_t size = floppy ? VFS_FAT_FLOPPY_SIZE : (VFS_FAT_SIZE * 1024ULL * 1024);
+
+    FILE *f = fopen(img_filename, "wb");
+    if (!f) {
+        printf("[native] vfs_fat_create_image: Could not create %s\n", img_filename);
+        return -1;
+    }
+
+    // Create the file and write a zero at the last byte to set the size
+    if (fseek(f, size - 1, SEEK_SET) != 0) {
+        printf("[native] vfs_fat_create_image: fseek failed on %s\n", img_filename);
+        fclose(f);
+        return -1;
+    }
+    fputc(0, f);
+    fclose(f);
+
+    printf("[native] Created %s disk image: %s (%zu bytes)\n",
+           floppy ? "floppy" : "HDD", img_filename, size);
+
+    return 0;
+}
 int vfs_fat_unmount_image(const char *) { return 0; }
 int vfs_fat_check_image(char *, char *) { return -1; }
 

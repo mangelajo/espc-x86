@@ -27,7 +27,12 @@
 #define SETUP_OK    0
 #define SETUP_ERROR 1
 
-#define SD_MOUNT_PATH  "/sdcard"
+#ifdef NATIVE_BUILD
+  // On native, use a local directory instead of /sdcard (no SD hardware)
+  #define SD_MOUNT_PATH  ".sd_card"
+#else
+  #define SD_MOUNT_PATH  "/sdcard"
+#endif
 #define FAT_MOUNT_PATH "/fat"
 
 #define MAX_FILEPATH_LEN 256
