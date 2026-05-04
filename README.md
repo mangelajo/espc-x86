@@ -23,7 +23,7 @@
 
 **ESPC‑x86** (PC/XT 8086 ESP32‑Emulation) is an emulator of a classic **IBM PC/XT (8086)** computer running on an **ESP32** microcontroller.
 
-The project is specially designed for the **LilyGo TTGo VGA32** board. With ESPC‑x86, the ESP32 becomes a fully functional retro PC capable of running classic **DOS software** and **Games**, recreating the experience of an early IBM‑compatible computer using inexpensive modern hardware.
+The project is specially designed for the **LilyGo TTGo VGA32** board. With ESPC‑x86, the ESP32 becomes a fully functional retro PC capable of running classic [DOS](https://en.wikipedia.org/wiki/DOS) **software** and **Games**, recreating the experience of an early IBM‑compatible computer using inexpensive modern hardware.
 
 ## Hardware
 
@@ -50,9 +50,11 @@ ESPC‑86 is primarily developed and tested on the following board:
 - Hercules/monochrome (HGC/MDA) graphics card emulation with 720x348 monochrome graphics mode.
 - Tandy graphics emulation supporting 160x200 and 320x200 graphics modes with 16 colors.
 - Partial EGA graphics card emulation (up to 128 KB VRAM, 320x200 16-colors graphics mode).
-- MCGA graphics emulation (320x200 graphics mode with 256 colors*, experimental).
+- MCGA graphics emulation (320x200 graphics mode with 256 colors[^1], experimental).
 - PC Speaker / buzzer sound emulation.
 - AdLib (OPL2) sound card emulation.
+
+[^1]: Note that while 256 colors are emulated, the LilyGo VGA32 hardware can only physically display up to 64 colors.
 
 ## Installation
 
