@@ -38,6 +38,7 @@
 #include "video/ega.h"
 #include "video/hercules.h"
 #include "video/tandy.h"
+#include "video/mcga.h"
 
 #include "esp_heap_caps.h"
 
@@ -162,6 +163,13 @@ void Computer::init()
       break;
     }
 
+    case video::VideoAdapterType::MCGA:
+    {
+      auto mcga = new video::MCGA();
+      m_video.active(video::VideoAdapterType::MCGA, mcga, mcga);
+      break;
+    }
+
     case video::VideoAdapterType::CGA:
     default:
     {
@@ -235,6 +243,7 @@ void Computer::init()
   setBaseDirectory(path);
   // Mount drives
   //setDriveImage(0, "tmpfs0.img");
+  //setDriveImage(3, "tmpfs3.img");
   for (int i = 0; i < 4; i++) {
     if (cfg.drive[i][0] != 0) {
       setDriveImage(i, cfg.drive[i], 0, 0, 0);

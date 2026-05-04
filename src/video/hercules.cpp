@@ -503,7 +503,7 @@ void HGC::writePort(uint16_t port, uint8_t value)
         case 0x09: // Maximum Scan Line Address
           // bit 7 6 5 4 3 2 1 0
           //     | | | +-+-+-+-+- [0-4] Max Scan Line
-          //     +-+-+----------- [5,7] Reserved
+          //     +-+-+----------- [5-7] Reserved
           // Max Scan Line
           // - Text mode: character height - 1
           // - Graphics mode: number of 8 KB banks

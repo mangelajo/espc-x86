@@ -222,6 +222,14 @@ void VideoScanout::setMode(int mode)
       m_modeLine = VGA_640x480_60Hz;
       break;
 
+    case MCGA_MODE_GFX_320x200_256COLORS:
+      m_width = 320;
+      m_height = 200;
+      m_callback = drawScanline_mcga_320x200x256;
+      m_scanLines = 1;
+      m_modeLine = QVGA_320x240_60Hz;
+      break;
+
     default:
       printf("video: Unexpected video mode (0x%02x)\n", m_currentMode);
       return;
@@ -251,10 +259,8 @@ void VideoScanout::pause(bool enable)
 {
   if (enable && (m_state == State::Running)) {
     m_state = State::Paused;
-printf("video: pause\n");
   } else if (!enable && (m_state == State::Paused)) {
     m_state = State::Running;
-printf("video: run\n");
   }
 }
 
@@ -348,6 +354,13 @@ void VideoScanout::reallocLUT()
       break;
 
     case EGA_MODE_GFX_640x350_16COLORS:
+      break;
+
+    case MCGA_MODE_GFX_320x200_256COLORS:
+      m_rawPixelLUT = (uint8_t *) heap_caps_malloc(256, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+      if (!m_rawPixelLUT) {
+        printf("video: Unable to allocate memory for the LUT!\n");
+      }
       break;
 
     default:
@@ -542,6 +555,13 @@ void VideoScanout::updateLUT()
     }
 
     case EGA_MODE_GFX_640x350_16COLORS:
+      break;
+
+    case MCGA_MODE_GFX_320x200_256COLORS:
+      // Initialize raw pixels LUT
+      for (int i = 0; i < 256; i++) {
+        m_rawPixelLUT[i] = m_VGADCtrl->createRawPixel(m_context->paletteMap(i, 256));
+      }
       break;
 
     default:
@@ -1437,6 +1457,31 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x350x16(void *ctx, uint8_t *dst
     *dst++ = LUT[pixel_L[1]];
     *dst++ = LUT[pixel_L[2]];
     *dst++ = LUT[pixel_L[3]];
+  }
+}
+
+void IRAM_ATTR VideoScanout::drawScanline_mcga_320x200x256(void *ctx, uint8_t *dst, int scanLine)
+{
+  constexpr int pixelsLine = 320;       // Pixels per scan line (m_width)
+  constexpr int bytesLine = pixelsLine; // Bytes per line
+
+  auto device = (VideoScanout *) ctx;
+
+  if ((scanLine == 0) && (device->m_state == State::Running)) {
+    device->m_frameCounter++;
+  }
+
+  auto src = device->m_vram + bytesLine * scanLine;
+
+  uint8_t *LUT = device->m_rawPixelLUT;
+
+  for (int i = 0; i < pixelsLine; i += 4) {
+    *(dst + 0) = LUT[*(src + 2)];
+    *(dst + 1) = LUT[*(src + 3)];
+    *(dst + 2) = LUT[*(src + 0)];
+    *(dst + 3) = LUT[*(src + 1)];
+    dst += 4;
+    src += 4;
   }
 }
 

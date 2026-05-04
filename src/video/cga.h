@@ -184,6 +184,10 @@ private:
   uint8_t m_modeControl; // Mode Control Register
   uint8_t m_colorSelect; // Color Select Register
 
+  // totalScanlines = (verticalTotal + 1) * charHeight + verticalTotalAdjust
+  // totalScanlines = (m_crtc[0x04] + 1) * m_crtc[0x09] + m_crtc[0x05]
+  uint8_t m_rowsVisible; // Number of visible rows
+  uint8_t m_charHeight;  // Character height
   uint16_t m_VSyncQuery;
   uint16_t m_startAddress; // in words
 

@@ -520,6 +520,12 @@ uint8_t CGA::readPort(uint16_t port)
     // real vertical sync is too fast for our slowly emulated 8086, so
     // here it is just a fake, just to allow programs that check it to keep going anyway.
     case CGA_PORT_STATUS:
+      // bit 7 6 5 4 3 2 1 0
+      //     | | | | | | | +- [0] Display Enable (1 = Blanking, 0 = Active)
+      //     | | | | | | +--- [1] Light Pen Trigger Set (1 = Triggered)
+      //     | | | | | +----- [2] Light Pen Switch Status (0 = Pressed/Closed)
+      //     | | | | +------- [3] Vertical Retrace (1 = In Progress)
+      //     +-+-+-+--------- [4-7] Unused (Usually 1 on original CGA)
       m_VSyncQuery++;
       return (m_VSyncQuery & 0x7) != 0 ? 0x09 : 0x00; // "not VSync" (0x00) every 7 queries
 
@@ -543,10 +549,75 @@ void CGA::writePort(uint16_t port, uint8_t value)
       m_crtc[m_crtcIndex] = value;
       switch (m_crtcIndex) {
 
+        // Hotizontal Total (in character clocks)
+        case 0x00:
+          break;
+
+        // Horizontal Displayed (in character clocks)
+        case 0x01:
+          break;
+
+        // Hotizontal Sync Position (in character clocks)
+        case 0x02:
+          break;
+
+        // Sync Width
+        case 0x03:
+          // bit 7 6 5 4 3 2 1 0
+          //     | | | | +-+-+-+- [0-3] Horizontal Sync Width
+          //     +-+-+-+--------- [4-7] Vertical Sync Width
+          break;
+
+        // Vertical Total (in character rows)
+        case 0x04:
+          // bit 7 6 5 4 3 2 1 0
+          //     | +-+-+-+-+-+-+- [0-6] Vertical Total (Rows - 1)
+          //     +--------------- [7] Reserved
+          break;
+
+        // Vertical Total Adjust (in scanlines)
+        case 0x05:
+          // bit 7 6 5 4 3 2 1 0
+          //     | | | +-+-+-+-+- [0-4] Number of additional scan lines
+          //     +-+-+----------- [5-7] Reserved
+          break;
+
+        // Vertical Displayed (in character rows)
+        case 0x06:
+          // bit 7 6 5 4 3 2 1 0
+          //     | +-+-+-+-+-+-+- [0-6] Number of rows displayed
+          //     +--------------- [7] Reserved
+          m_rowsVisible = (value & 0x3F) + 1;
+          break;
+
+        // Vertical Sync Position (in character rows)
+        case 0x07:
+          // bit 7 6 5 4 3 2 1 0
+          //     | +-+-+-+-+-+-+- [0-6] Row position where VSync starts
+          //     +--------------- [7] Reserved
+          break;
+
+        // Interlace Mode
+        case 0x08:
+          // bit 7 6 5 4 3 2 1 0
+          //     | | | | | | +-+- [0-1] Interlace Mode (00/10=Normal, 01=Interlace, 11=Interlace & Sync)
+          //     +-+-+-+-+-+----- [2-7] Reserved
+          break;
+
+        // Maximum Scan Line Address (in scanlines per character)
+        case 0x09:
+          // bit 7 6 5 4 3 2 1 0
+          //     | | | +-+-+-+-+- [0-4] Maximum Scan Line Address
+          //     +-+-+----------- [5-7] Unused (Reserved/Ignored)
+          m_charHeight = value & 0x1F;
+          break;
+
         // Cursor Start
         case CGA_CRTC_CURSORSTART:
-          // bits 0..4 : Cursor start scanline
-          // bit  5    : Cursor disable
+          // bit 7 6 5 4 3 2 1 0
+          //     | | | +-+-+-+-+- [0-4] Starting scanline for cursor
+          //     | +-+----------- [5-6] Cursor Mode (00=Normal, 01=Invisible, 10=Blink 1/16, 11=Blink 1/32)
+          //     +--------------- [7] Reserved
           m_cursorStart = value & 0x1F;
           m_cursorDisable = (value & 0x20) != 0;
           m_dirty = true;
@@ -554,13 +625,18 @@ void CGA::writePort(uint16_t port, uint8_t value)
 
         // Cursor End
         case CGA_CRTC_CURSOREND:
-          // bits 0..4 : Cursor end scanline
+          // bit 7 6 5 4 3 2 1 0
+          //     | | | +-+-+-+-+- [0-4] Ending scanline for cursor
+          //     +-+-+----------- [5-7] Reserved
           m_cursorEnd = value & 0x1F;
           m_dirty = true;
           break;
 
         // Start Address High and Low
         case CGA_CRTC_STARTADDR_HI:
+          // bit 7 6 5 4 3 2 1 0
+          //     | | +-+-+-+-+-+- [0-5] Start address bits 8-13
+          //     +-+------------- [6-7] Reserved
         case CGA_CRTC_STARTADDR_LO:
         {
           const uint16_t addr_hi = (uint16_t) m_crtc[CGA_CRTC_STARTADDR_HI] << 8;
@@ -576,6 +652,9 @@ void CGA::writePort(uint16_t port, uint8_t value)
 
         // Cursor Position High and Low
         case CGA_CRTC_CURSORPOS_HI:
+          // bit 7 6 5 4 3 2 1 0
+          //     | | +-+-+-+-+-+- [0-5] Cursor address bits 8-13
+          //     +-+------------- [6-7] Reserved
         case CGA_CRTC_CURSORPOS_LO:
         {
           const uint16_t pos_hi = (uint16_t) m_crtc[CGA_CRTC_CURSORPOS_HI] << 8;
@@ -588,6 +667,10 @@ void CGA::writePort(uint16_t port, uint8_t value)
           m_dirty = true;
           break;
         }
+       
+        case 0x10: // Light Pen High
+        case 0x11: // Light Pen Low
+          break;
 
         default:
           printf("cga: Unhandled crtc[0x%02x]=0x%02x\n", m_crtcIndex, value);

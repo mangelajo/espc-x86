@@ -93,15 +93,15 @@ void Settings::show()
       ret = m_osd->radioList(28, 16, Lang::get(Lang::Msg::MenuConfigSoundOptions),
                              0, COL_LIGHTGRAY);
 #else
-      m_osd->frame(24, 4, 31, 17, Lang::get(Lang::Msg::MenuConfigTitle),
+      m_osd->frame(24, 3, 31, 18, Lang::get(Lang::Msg::MenuConfigTitle),
                    false, COL_WHITE, COL_LIGHTGRAY, true, true);
-      m_osd->frame(26, 6, 27, 8, Lang::get(Lang::Msg::MenuConfigVideoTitle),
+      m_osd->frame(26, 5, 27, 9, Lang::get(Lang::Msg::MenuConfigVideoTitle),
                    false, COL_WHITE, COL_LIGHTGRAY, true, false);
       m_osd->frame(26, 14, 27, 6, Lang::get(Lang::Msg::MenuConfigSoundTitle),
                    false, COL_WHITE, COL_LIGHTGRAY, true, false);
 
       m_osd->radioGroupBegin();
-      m_osd->radioGroupAdd(28, 8, Lang::get(Lang::Msg::MenuConfigVideoOptions), &video);
+      m_osd->radioGroupAdd(28, 7, Lang::get(Lang::Msg::MenuConfigVideoOptions), &video);
       m_osd->radioGroupAdd(28, 16, Lang::get(Lang::Msg::MenuConfigSoundOptions), &sound);
       ret = m_osd->radioGroupRun(COL_LIGHTGRAY);
       if (ret != -1) {

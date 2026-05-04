@@ -36,7 +36,8 @@ enum class VideoAdapterType : uint8_t {
   CGA,
   EGA,
   HGC,
-  TGA
+  TGA,
+  MCGA
 };
 
 // VideoSystem is the interface that binds together:

@@ -50,6 +50,9 @@
 #define MDA_MODE_GFX_720x348_MONO         0x0F // MDA high-resolution monochrome
 #define EGA_MODE_GFX_640x350_16COLORS     0x10 // EGA flagship color mode
 
+// MCGA
+#define MCGA_MODE_GFX_320x200_256COLORS   0x13
+
 using fabgl::VGADirectController;
 using fabgl::DrawScanlineCallback;
 using fabgl::FontInfo;
@@ -168,6 +171,7 @@ private:
   static void drawScanline_ega_640x200x16(void *ctx, uint8_t *dst, int scanLine);
   static void drawScanline_mda_720x348x2(void *ctx, uint8_t *dst, int scanLine);
   static void drawScanline_ega_640x350x16(void *ctx, uint8_t *dst, int scanLine);
+  static void drawScanline_mcga_320x200x256(void *ctx, uint8_t *dst, int scanLine);
 
   friend void drawOSDVolume(VideoScanout *device, int pixelsLine, int scanLines, int charScanline, int textRow, uint8_t *dst);
   friend void drawOSDPause(VideoScanout *device, int pixelsLine, int scanLines, int charScanline, int textRow, uint8_t *dst);
