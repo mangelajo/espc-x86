@@ -151,20 +151,26 @@ void Tandy::handleInt10h()
     // Set Video Mode
     case 0x00:
     {
-      uint8_t mode = i8086::AL();
+      // bit 7 6 5 4 3 2 1 0
+      //     | +-+-+-+-+-+-+- [0-6] Video Mode
+      //     +--------------- [7] Clear Memory Flag (0=clear, 1=don't clear)
+      const uint8_t mode = i8086::AL();
+      uint8_t videoMode = mode & 0x7F;
+      const bool cls = (mode & 0x80) == 0;
 
       // MDA Text Mode 80x25 (mono) - monochrome ignored by CGA
-      if (mode == MDA_MODE_TEXT_80x25_MONO) {
-        printf("tandy: Ignoring MDA text video mode (0x%02x)\n", mode);
-        mode = CGA_MODE_TEXT_80x25_16COLORS;
+      if (videoMode == MDA_MODE_TEXT_80x25_MONO) {
+        printf("tandy: Ignoring MDA text video mode (0x%02x)\n", videoMode);
+        videoMode = CGA_MODE_TEXT_80x25_16COLORS;
       }
 
-      if (mode == m_currentMode) {
-        clearScreen();
+      if (videoMode == m_currentMode) {
+        if (cls)
+          clearScreen();
         break; // Nothing to do
       }
 
-      switch (mode) {
+      switch (videoMode) {
 
         // Text Mode 40x25
         case CGA_MODE_TEXT_40x25_16COLORS:
@@ -215,7 +221,7 @@ void Tandy::handleInt10h()
           break;
 
         default:
-          printf("tandy: Warning! Unexpected video mode (0x%02x)\n", mode);
+          printf("tandy: Warning! Unexpected video mode (0x%02x)\n", videoMode);
           return;
       }
       m_colorSelect = TGA_DEFAULT_COLORSELECT;
@@ -230,8 +236,10 @@ void Tandy::handleInt10h()
 
       m_video->stop();
 
-      setMode(mode);
-      clearScreen();
+      setMode(videoMode);
+      if (cls) {
+        clearScreen();
+      }
 
       // Update BIOS Data Area
       s_ram[0x449] = m_currentMode;

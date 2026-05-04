@@ -149,6 +149,7 @@ void CGA::handleInt10h()
       }
 
       if (mode == m_currentMode) {
+        // Always clear screen
         clearScreen();
         break; // Nothing to do
       }
@@ -204,6 +205,7 @@ void CGA::handleInt10h()
       m_video->stop();
 
       setMode(mode);
+      // Always clear screen
       clearScreen();
 
       // Update BIOS Data Area

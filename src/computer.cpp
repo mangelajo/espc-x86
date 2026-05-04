@@ -250,7 +250,7 @@ void Computer::init()
   setBaseDirectory(path);
   // Mount drives
   //setDriveImage(0, "tmpfs0.img");
-  //setDriveImage(3, "tmpfs3.img");
+  setDriveImage(3, "tmpfs3.img");
   for (int i = 0; i < 4; i++) {
     if (cfg.drive[i][0] != 0) {
       setDriveImage(i, cfg.drive[i], 0, 0, 0);

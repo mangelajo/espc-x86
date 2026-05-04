@@ -165,28 +165,32 @@ void MCGA::resetRegisters()
 void MCGA::handleInt10h()
 {
   const uint8_t AH = i8086::AH();
-  printf("int 10h AH=0x%02x\n", AH);
 
   switch (AH) {
 
     // Set Video Mode
     case 0x00:
     {
-      uint8_t mode = i8086::AL();
-      printf("int 10h set mode 0x%02x\n", mode);
+      // bit 7 6 5 4 3 2 1 0
+      //     | +-+-+-+-+-+-+- [0-6] Video Mode
+      //     +--------------- [7] Clear Memory Flag (0=clear, 1=don't clear)
+      const uint8_t mode = i8086::AL();
+      uint8_t videoMode = mode & 0x7F;
+      const bool cls = (mode & 0x80) == 0;
 
       // MDA Text Mode 80x25 (mono) - monochrome ignored by MCGA
-      if (mode == MDA_MODE_TEXT_80x25_MONO) {
-        printf("mcga: Ignoring MDA text video mode (0x%02x)\n", mode);
-        mode = CGA_MODE_TEXT_80x25_16COLORS;
+      if (videoMode == MDA_MODE_TEXT_80x25_MONO) {
+        printf("mcga: Ignoring MDA text video mode (0x%02x)\n", videoMode);
+        videoMode = CGA_MODE_TEXT_80x25_16COLORS;
       }
 
-      if (mode == m_currentMode) {
-        clearScreen();
+      if (videoMode == m_currentMode) {
+        if (cls)
+          clearScreen();
         break; // Nothing to do
       }
 
-      switch(mode) {
+      switch(videoMode) {
 
         // Text Mode 40x25
         case CGA_MODE_TEXT_40x25_16COLORS:
@@ -229,7 +233,7 @@ void MCGA::handleInt10h()
           break;
 
         default:
-          printf("mcga: Warning! Unexpected video mode (0x%02x)\n", mode);
+          printf("mcga: Warning! Unexpected video mode (0x%02x)\n", videoMode);
           return;
       }
       m_colorSelect = MCGA_DEFAULT_COLORSELECT;
@@ -244,8 +248,10 @@ void MCGA::handleInt10h()
 
       m_video->stop();
 
-      setMode(mode);
-      clearScreen();
+      setMode(videoMode);
+      if (cls) {
+        clearScreen();
+      }
 
       // Update BIOS Data Area
       s_ram[0x449] = m_currentMode;
@@ -508,6 +514,15 @@ void MCGA::handleInt10h()
           m_dacPalette[index][2] = i8086::CL() & 0x3F; // Blue component
 
           //TODO Convert VGA 6-bit DAC values (0-63) to RGB222 (0-3) used by VGA32
+          // with rounding: r2 = round(r6 * 3 / 63)
+          const uint8_t r2 = (uint8_t) (((uint16_t) m_dacPalette[index][0] * 3 + 31) / 63);
+          const uint8_t g2 = (uint8_t) (((uint16_t) m_dacPalette[index][1] * 3 + 31) / 63);
+          const uint8_t b2 = (uint8_t) (((uint16_t) m_dacPalette[index][2] * 3 + 31) / 63);
+
+          // Update the scanout palette (index -> RGB222)
+          MCGA_palette[index] = RGB222(r2, g2, b2);
+          //TODO m_video->updateLUT();
+
           i8086::setFlagCF(false);
           break;
         }
@@ -568,6 +583,7 @@ void MCGA::handleInt10h()
 
     // Info
     case 0x12:
+      printf("mcga: int 10h (AH=0x12)\n");
       i8086::setFlagCF(false);
       break;
 
@@ -631,7 +647,6 @@ uint8_t MCGA::readPort(uint16_t port)
 
     // CRTC Data
     case MCGA_PORT_CRTCDATA:
-//printf("read 0x%04x = 0x%02x\n", port, m_crtc[m_crtcIndex]);
       return m_crtc[m_crtcIndex];
 
     // Mode Control Register

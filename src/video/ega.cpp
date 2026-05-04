@@ -214,8 +214,9 @@ void EGA::handleInt10h()
     // Set Video Mode
     case 0x00:
     {
-      // bits 0..6 : Video Mode
-      // bit 7     : Clear Screen (0 = clear)
+      // bit 7 6 5 4 3 2 1 0
+      //     | +-+-+-+-+-+-+- [0-6] Video Mode
+      //     +--------------- [7] Clear Memory Flag (0=clear, 1=don't clear)
       const uint8_t mode = i8086::AL();
       uint8_t videoMode = mode & 0x7F;
       const bool cls = (mode & 0x80) == 0;
@@ -225,7 +226,11 @@ void EGA::handleInt10h()
         videoMode = CGA_MODE_TEXT_80x25_16COLORS;
       }
 
-      //TODO if (videoMode == m_currentMode)
+      if (videoMode == m_currentMode) {
+        if (cls)
+          clearScreen();
+        break; // Nothing to do
+      }
 
       m_video->stop();
 
