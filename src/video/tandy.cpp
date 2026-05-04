@@ -151,15 +151,12 @@ void Tandy::handleInt10h()
     // Set Video Mode
     case 0x00:
     {
-      uint8_t mode = i8086::AL() & 0x07;
+      uint8_t mode = i8086::AL();
 
       // MDA Text Mode 80x25 (mono) - monochrome ignored by CGA
       if (mode == MDA_MODE_TEXT_80x25_MONO) {
         printf("tandy: Ignoring MDA text video mode (0x%02x)\n", mode);
         mode = CGA_MODE_TEXT_80x25_16COLORS;
-      } else if (mode == 1) {
-        printf("tandy: Ignoring 40x25 text video mode (0x%02x)\n", mode);
-        mode = TGA_MODE_GFX_320x200_16COLORS;
       }
 
       if (mode == m_currentMode) {

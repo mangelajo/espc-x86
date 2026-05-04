@@ -50,6 +50,7 @@ ESPC‑86 is primarily developed and tested on the following board:
 - Hercules/monochrome (HGC/MDA) graphics card emulation with 720x348 monochrome graphics mode.
 - Tandy graphics emulation supporting 160x200 and 320x200 graphics modes with 16 colors.
 - Partial EGA graphics card emulation (up to 128 KB VRAM, 320x200 16-colors graphics mode).
+- MCGA graphics emulation (320x200 graphics mode with 256 colors*, experimental).
 - PC Speaker / buzzer sound emulation.
 - AdLib (OPL2) sound card emulation.
 
