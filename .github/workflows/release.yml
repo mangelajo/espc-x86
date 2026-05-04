@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish ESP32 firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: ${{ runner.os }}-pio-esp32-${{ hashFiles('platformio.ini') }}
+          restore-keys: ${{ runner.os }}-pio-esp32-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build ESP32 firmware
+        run: pio run -e esp32dev
+
+      - name: Stage flashable artifacts
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          OUT="dist/espc-x86-${VERSION}-esp32dev"
+          mkdir -p "${OUT}"
+          BUILD=.pio/build/esp32dev
+          cp "${BUILD}/firmware.bin"   "${OUT}/firmware.bin"
+          cp "${BUILD}/bootloader.bin" "${OUT}/bootloader.bin"
+          cp "${BUILD}/partitions.bin" "${OUT}/partitions.bin"
+
+          # Build a single merged image flashable at offset 0x0
+          # (matches the layout used by the web installer)
+          python -m esptool --chip esp32 merge_bin \
+            -o "${OUT}/firmware-merged.bin" \
+            --flash_mode qio --flash_freq 80m --flash_size 4MB \
+            0x1000  "${BUILD}/bootloader.bin" \
+            0x8000  "${BUILD}/partitions.bin" \
+            0x10000 "${BUILD}/firmware.bin"
+
+          (cd dist && zip -r "espc-x86-${VERSION}-esp32dev.zip" "espc-x86-${VERSION}-esp32dev")
+          ls -la "${OUT}" dist/
+
+      - name: Upload release artifact (workflow run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: espc-x86-${{ github.ref_name }}-esp32dev
+          path: dist/espc-x86-${{ github.ref_name }}-esp32dev/
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          OUT="dist/espc-x86-${VERSION}-esp32dev"
+          for f in \
+              "${OUT}/firmware.bin" \
+              "${OUT}/bootloader.bin" \
+              "${OUT}/partitions.bin" \
+              "${OUT}/firmware-merged.bin" \
+              "dist/espc-x86-${VERSION}-esp32dev.zip"; do
+            test -f "${f}" || { echo "missing: ${f}" >&2; exit 1; }
+          done
+
+          # Create the release if it doesn't exist yet, then upload assets.
+          # --clobber lets the job be re-run safely.
+          if ! gh release view "${VERSION}" >/dev/null 2>&1; then
+            gh release create "${VERSION}" \
+              --title "${VERSION}" \
+              --generate-notes \
+              --verify-tag
+          fi
+
+          gh release upload "${VERSION}" \
+            "${OUT}/firmware.bin" \
+            "${OUT}/bootloader.bin" \
+            "${OUT}/partitions.bin" \
+            "${OUT}/firmware-merged.bin" \
+            "dist/espc-x86-${VERSION}-esp32dev.zip" \
+            --clobber

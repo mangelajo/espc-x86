@@ -31,6 +31,10 @@
 
 #include "esp_intr_alloc.h"
 
+#ifdef NATIVE_BUILD
+#include <time.h>
+#endif
+
 namespace fabgl {
 
 /**
@@ -48,6 +52,14 @@ struct CoreUsage {
 
 void esp_intr_alloc_pinnedToCore(int source, int flags, intr_handler_t handler, void * arg, intr_handle_t * ret_handle, int core);
 
+#ifdef NATIVE_BUILD
+inline uint32_t getCycleCount() {
+  // Use host clock as a rough cycle counter substitute
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint32_t)(ts.tv_sec * 1000000000ULL + ts.tv_nsec);
+}
+#else
 inline __attribute__((always_inline)) uint32_t getCycleCount() {
   uint32_t ccount;
   __asm__ __volatile__(
@@ -57,5 +69,6 @@ inline __attribute__((always_inline)) uint32_t getCycleCount() {
   );
   return ccount;
 }
+#endif
 
 } // end of namespace

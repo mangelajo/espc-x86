@@ -46,10 +46,17 @@
 
 // ESP32 PSRAM bug workaround (use when the library is NOT compiled with PSRAM hack enabled)
 // Place between a write and a read PSRAM operation (write->ASM_MEMW->read), not viceversa
-#define ASM_MEMW asm(" MEMW");
-#define ASM_NOP asm(" NOP");
-#define PSRAM_WORKAROUND1 asm(" nop;nop;nop;nop");
-#define PSRAM_WORKAROUND2 asm(" memw");
+#ifdef NATIVE_BUILD
+  #define ASM_MEMW
+  #define ASM_NOP
+  #define PSRAM_WORKAROUND1
+  #define PSRAM_WORKAROUND2
+#else
+  #define ASM_MEMW asm(" MEMW");
+  #define ASM_NOP asm(" NOP");
+  #define PSRAM_WORKAROUND1 asm(" nop;nop;nop;nop");
+  #define PSRAM_WORKAROUND2 asm(" memw");
+#endif
 
 #define VIDEOMEM_START 0xA0000
 #define VIDEOMEM_END   0xC0000

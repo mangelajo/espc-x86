@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="#what-is-espc-86">What is ESPC‑86?</a> •
+  <a href="#what-is-espc-x86?">What is ESPC‑x86?</a> •
   <a href="#hardware">Hardware</a> •
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •

@@ -238,7 +238,14 @@ void Computer::init()
 
   static char path[MAX_FILEPATH_LEN];
 
+#ifdef NATIVE_BUILD
+  // cfg.media_path (default: SD_MOUNT_PATH "/espc-x86/media") already
+  // contains the prefix, so use it directly to avoid double-prefixing.
+  strncpy(path, cfg.media_path, MAX_FILEPATH_LEN - 1);
+  path[MAX_FILEPATH_LEN - 1] = 0;
+#else
   sprintf(path, "%s%s", SD_MOUNT_PATH, cfg.media_path);
+#endif
 
   setBaseDirectory(path);
   // Mount drives

@@ -52,6 +52,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef FABGL_EMULATED
+  #include "SDL.h"
+#endif
+
 namespace fabgl {
 
 #define FABGL_SOUNDGEN_DEFAULT_SAMPLE_RATE 16384
