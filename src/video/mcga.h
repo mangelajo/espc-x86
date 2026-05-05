@@ -144,6 +144,21 @@ private:
 
   uint8_t m_dacPalette[256][3]; 
 
+  inline RGB222 RGB666toRGB222(uint8_t r6, uint8_t g6, uint8_t b6) {
+#if 0
+    // Truncation
+    const uint8_t r2 = (r6 * 3) >> 6;
+    const uint8_t g2 = (g6 * 3) >> 6;
+    const uint8_t b2 = (b6 * 3) >> 6;
+#else
+    // Rounding conversion: (value * 3 + 31) / 63
+    const uint8_t r2 = (r6 * 3 + 31) / 63;
+    const uint8_t g2 = (g6 * 3 + 31) / 63;
+    const uint8_t b2 = (b6 * 3 + 31) / 63;
+#endif
+    return RGB222(r2, g2, b2);
+  }
+
   uint8_t m_modeControl; // Mode Control Register
   uint8_t m_colorSelect; // Color Select Register
 
