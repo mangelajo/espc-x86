@@ -14,6 +14,7 @@
   <a href="#installation">Installation</a> •
   <a href="#configuration">Configuration</a> •
   <a href="#controls">Controls</a> •
+  <a href="#screenshots">Screenshots</a> •
   <a href="#license">License</a>
 </p>
 
