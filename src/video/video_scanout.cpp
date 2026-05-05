@@ -109,6 +109,7 @@ void VideoScanout::setSource(ScanoutContext *context)
   } else {
     m_vram = m_context->vram();
   }
+  m_vramSize = m_context->vramSize();
 }
 
 void VideoScanout::setMode(int mode)
@@ -560,7 +561,7 @@ void VideoScanout::updateLUT()
     case MCGA_MODE_GFX_320x200_256COLORS:
       // Initialize raw pixels LUT
       for (int i = 0; i < 256; i++) {
-        m_rawPixelLUT[i] = m_VGADCtrl->createRawPixel(m_context->paletteMap(i, 256));
+        m_rawPixelLUT[i] = m_VGADCtrl->createRawPixel(m_context->paletteMap(i, 0));
       }
       break;
 
@@ -670,27 +671,28 @@ void IRAM_ATTR VideoScanout::drawScanline_text_40x25(void *ctx, uint8_t *dst, in
   constexpr int charSize   = charBytes * charHeight; // Char size in bytes
   constexpr int scanLines  = 4;
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
 
-    auto vcard = (ScanoutContext *) device->m_context;
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
 
-    device->m_startAddress = vcard->startAddress();
-    device->m_textPageSize = vcard->textPageSize();
-    const uint8_t page = vcard->activePage();
-    device->m_activePage = page;
-    device->m_cursorRow = vcard->cursorRow(page);
-    device->m_cursorCol = vcard->cursorCol(page);
-    device->m_cursorEnabled = vcard->cursorEnabled();
-    device->blinkEnabled = vcard->blinkEnabled();
+    output->m_startAddress = adapter->startAddress();
+    output->m_textPageSize = adapter->textPageSize();
+    const uint8_t page = adapter->activePage();
+    output->m_activePage = page;
+    output->m_cursorRow = adapter->cursorRow(page);
+    output->m_cursorCol = adapter->cursorCol(page);
+    output->m_cursorEnabled = adapter->cursorEnabled();
+    output->blinkEnabled = adapter->blinkEnabled();
   }
 
   // If the current scanline is outside the CGA active area,
   // fill the entire scanline with the border color.
   if ((scanLine < 20) || (scanLine >= 220)) {
-    memset(dst, device->m_rawBorderColor, pixelsLine * scanLines);
+    memset(dst, output->m_rawBorderColor, pixelsLine * scanLines);
     return;
   }
 
@@ -698,28 +700,28 @@ void IRAM_ATTR VideoScanout::drawScanline_text_40x25(void *ctx, uint8_t *dst, in
   const int charScanline = scanLine & (charHeight - 1);
   const int textRow = scanLine / charHeight;
 
-  uint8_t const *fontData = device->m_font.data + (charScanline * charBytes);
+  uint8_t const *fontData = output->m_font.data + (charScanline * charBytes);
 
 #if 1
   // Note that in CGA video cards page base (m_activePage * m_textPageSize)
   // and m_startAddress are the SAME offset
-  // const uint32_t pageBase = (uint32_t) device->m_activePage * device->m_textPageSize;
-  const uint32_t pageBase = (uint32_t) device->m_startAddress << 1; // words to bytes
-  uint8_t const *src = device->m_vram + pageBase + (textRow * textCols * 2);
+  // const uint32_t pageBase = (uint32_t) output->m_activePage * output->m_textPageSize;
+  const uint32_t pageBase = (uint32_t) output->m_startAddress << 1; // words to bytes
+  uint8_t const *src = output->m_vram + pageBase + (textRow * textCols * 2);
 #else
-  const uint32_t pageBase = uint32_t(device->m_activePage) * device->m_textPageSize;
-  const uint32_t startOffset = (device->m_startAddress << 1); // in text, addressing in words
+  const uint32_t pageBase = uint32_t(output->m_activePage) * output->m_textPageSize;
+  const uint32_t startOffset = (output->m_startAddress << 1); // in text, addressing in words
 
-  uint8_t const *src = device->m_vram + pageBase + startOffset + (textRow * textCols * 2);
+  uint8_t const *src = output->m_vram + pageBase + startOffset + (textRow * textCols * 2);
 #endif
 
-  uint8_t *LUT = device->m_rawPixelLUT;
+  uint8_t *LUT = output->m_rawPixelLUT;
 
-  bool showCursor = device->m_cursorEnabled && device->m_cursorRow == textRow && ((device->m_frameCounter & 0x1f) < 0xf);
-  int cursorCol = device->m_cursorCol;
+  bool showCursor = output->m_cursorEnabled && output->m_cursorRow == textRow && ((output->m_frameCounter & 0x1f) < 0xf);
+  int cursorCol = output->m_cursorCol;
 
-  bool bit7blink = device->blinkEnabled;
-  bool blinktime = bit7blink && !((device->m_frameCounter & 0x3f) < 0x1f);
+  bool bit7blink = output->blinkEnabled;
+  bool blinktime = bit7blink && !((output->m_frameCounter & 0x3f) < 0x1f);
 
   for (int textCol = 0; textCol < textCols; textCol++) {
 
@@ -743,7 +745,7 @@ void IRAM_ATTR VideoScanout::drawScanline_text_40x25(void *ctx, uint8_t *dst, in
 
     if (showCursor && textCol == cursorCol) {
 
-      uint8_t const *p_cursorBitmap = device->m_cursorGlyph + (charScanline * charBytes);
+      uint8_t const *p_cursorBitmap = output->m_cursorGlyph + (charScanline * charBytes);
 
       for (int charRow = 0; charRow < scanLines; charRow++) {
 
@@ -796,30 +798,31 @@ void IRAM_ATTR VideoScanout::drawScanline_text_80x25(void *ctx, uint8_t *dst, in
   constexpr int charSize   = charBytes * charHeight; // Char size in bytes
   constexpr int scanLines  = 4;
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 /*
-  if ((device->m_state == State::Paused) && xPortInIsrContext())
+  if ((output->m_state == State::Paused) && xPortInIsrContext())
     return;
 */
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
 
-    auto vcard = (ScanoutContext *) device->m_context;
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
 
-    device->m_startAddress = vcard->startAddress();
-    device->m_textPageSize = vcard->textPageSize();
-    const uint8_t page = vcard->activePage();
-    device->m_activePage = page;
-    device->m_cursorRow = vcard->cursorRow(page);
-    device->m_cursorCol = vcard->cursorCol(page);
-    device->m_cursorEnabled = vcard->cursorEnabled();
-    device->blinkEnabled = vcard->blinkEnabled();
+    output->m_startAddress = adapter->startAddress();
+    output->m_textPageSize = adapter->textPageSize();
+    const uint8_t page = adapter->activePage();
+    output->m_activePage = page;
+    output->m_cursorRow = adapter->cursorRow(page);
+    output->m_cursorCol = adapter->cursorCol(page);
+    output->m_cursorEnabled = adapter->cursorEnabled();
+    output->blinkEnabled = adapter->blinkEnabled();
   }
 
   // If the current scanline is outside the CGA active area,
   // fill the entire scanline with the border color.
   if ((scanLine < 20) || (scanLine >= 220)) {
-    memset(dst, device->m_rawBorderColor, pixelsLine * scanLines);
+    memset(dst, output->m_rawBorderColor, pixelsLine * scanLines);
     return;
   }
 
@@ -827,28 +830,28 @@ void IRAM_ATTR VideoScanout::drawScanline_text_80x25(void *ctx, uint8_t *dst, in
   const int charScanline = activeScanLine & (charHeight - 1);
   const int textRow = activeScanLine / charHeight;
 
-  uint8_t const *fontData = device->m_font.data + (charScanline * charBytes);
+  uint8_t const *fontData = output->m_font.data + (charScanline * charBytes);
 
 #if 1
   // Note that in CGA video cards page base (m_activePage * m_textPageSize)
   // and m_startAddress are the SAME offset
-  // const uint32_t pageBase = (uint32_t) device->m_activePage * device->m_textPageSize;
-  uint32_t pageBase = (uint32_t) device->m_startAddress << 1; // words to bytes
-  uint8_t const *src = device->m_vram + pageBase + (textRow * textCols * 2);
+  // const uint32_t pageBase = (uint32_t) output->m_activePage * output->m_textPageSize;
+  uint32_t pageBase = (uint32_t) output->m_startAddress << 1; // words to bytes
+  uint8_t const *src = output->m_vram + pageBase + (textRow * textCols * 2);
 #else
-  const uint32_t pageBase = uint32_t(device->m_activePage) * device->m_textPageSize;
-  const uint32_t startOffset = (device->m_startAddress << 1); // in text, addressing in words
+  const uint32_t pageBase = uint32_t(output->m_activePage) * output->m_textPageSize;
+  const uint32_t startOffset = (output->m_startAddress << 1); // in text, addressing in words
 
-  uint8_t const *src = device->m_vram + pageBase + startOffset + (textRow * textCols * 2);
+  uint8_t const *src = output->m_vram + pageBase + startOffset + (textRow * textCols * 2);
 #endif
 
-  uint8_t *LUT = device->m_rawPixelLUT;
+  uint8_t *LUT = output->m_rawPixelLUT;
 
-  bool showCursor = device->m_cursorEnabled && device->m_cursorRow == textRow && ((device->m_frameCounter & 0x1f) < 0xf);
-  int cursorCol = device->m_cursorCol;
+  bool showCursor = output->m_cursorEnabled && output->m_cursorRow == textRow && ((output->m_frameCounter & 0x1f) < 0xf);
+  int cursorCol = output->m_cursorCol;
 
-  bool bit7blink = device->blinkEnabled;
-  bool blinktime = bit7blink && !((device->m_frameCounter & 0x3f) < 0x1f);
+  bool bit7blink = output->blinkEnabled;
+  bool blinktime = bit7blink && !((output->m_frameCounter & 0x3f) < 0x1f);
 
   for (int textCol = 0; textCol < textCols; textCol++) {
 
@@ -873,7 +876,7 @@ void IRAM_ATTR VideoScanout::drawScanline_text_80x25(void *ctx, uint8_t *dst, in
 
     if (showCursor && textCol == cursorCol) {
 
-      uint8_t const *p_cursorBitmap = device->m_cursorGlyph + (charScanline * charBytes);
+      uint8_t const *p_cursorBitmap = output->m_cursorGlyph + (charScanline * charBytes);
 
       if (charAttr == 0) { // Show always a cursor (when no attribute was defined)
       	colors[1] = blink ? bg : LUT[0x07];
@@ -919,16 +922,16 @@ void IRAM_ATTR VideoScanout::drawScanline_text_80x25(void *ctx, uint8_t *dst, in
     dst += 8;
   }
 
-  if (device->m_OSD_showVolume) {
+  if (output->m_OSD_showVolume) {
     // Hide after ~150 frames (~2.5 seconds @ 60Hz)
-    if ((device->m_frameCounter - device->m_OSD_frame) > 150) {
-      device->m_OSD_showVolume = false;
+    if ((output->m_frameCounter - output->m_OSD_frame) > 150) {
+      output->m_OSD_showVolume = false;
     } else {
-      drawOSDVolume(device, pixelsLine, scanLines, charScanline, textRow, dst);
+      drawOSDVolume(output, pixelsLine, scanLines, charScanline, textRow, dst);
     }
-  } else if (device->m_state == State::Paused) {
+  } else if (output->m_state == State::Paused) {
     // Show only when emulator is paused (you must set this flag from Computer/VideoSystem)
-    drawOSDPause(device, pixelsLine, scanLines, charScanline, textRow, dst);
+    drawOSDPause(output, pixelsLine, scanLines, charScanline, textRow, dst);
   }
 }
 
@@ -942,48 +945,48 @@ void IRAM_ATTR VideoScanout::drawScanline_mda_80x25(void *ctx, uint8_t *dst, int
   constexpr int charSize   = charBytes * charHeight; // Char size in bytes
   constexpr int scanLines  = 8;
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
 
-    auto vcard = (ScanoutContext *) device->m_context;
+    ScanoutContext *adapter = output->m_context;
 
-    device->m_startAddress = vcard->startAddress();
-    device->m_textPageSize = vcard->textPageSize();
-    const uint8_t page = vcard->activePage();
-    device->m_activePage = page;
-    device->m_cursorRow = vcard->cursorRow(page);
-    device->m_cursorCol = vcard->cursorCol(page);
-    device->m_cursorEnabled = vcard->cursorEnabled();
-    device->blinkEnabled = vcard->blinkEnabled();
+    output->m_startAddress = adapter->startAddress();
+    output->m_textPageSize = adapter->textPageSize();
+    const uint8_t page = adapter->activePage();
+    output->m_activePage = page;
+    output->m_cursorRow = adapter->cursorRow(page);
+    output->m_cursorCol = adapter->cursorCol(page);
+    output->m_cursorEnabled = adapter->cursorEnabled();
+    output->blinkEnabled = adapter->blinkEnabled();
   }
 
   const int charScanline = scanLine & (charHeight - 1);
   const int textRow = scanLine / charHeight;
 
-  uint8_t const *fontData = device->m_font.data + (charScanline * charBytes);
+  uint8_t const *fontData = output->m_font.data + (charScanline * charBytes);
 
 #if 1
   // Note that in CGA video cards page base (m_activePage * m_textPageSize)
   // and m_startAddress are the SAME offset
-  // const uint32_t pageBase = (uint32_t) device->m_activePage * device->m_textPageSize;
-  uint32_t pageBase = (uint32_t) device->m_startAddress << 1; // words to bytes
-  uint8_t const *src = device->m_vram + pageBase + (textRow * textCols * 2);
+  // const uint32_t pageBase = (uint32_t) output->m_activePage * output->m_textPageSize;
+  uint32_t pageBase = (uint32_t) output->m_startAddress << 1; // words to bytes
+  uint8_t const *src = output->m_vram + pageBase + (textRow * textCols * 2);
 #else
-  const uint32_t pageBase = uint32_t(device->m_activePage) * device->m_textPageSize;
-  const uint32_t startOffset = (device->m_startAddress << 1); // in text, addressing in words
+  const uint32_t pageBase = uint32_t(output->m_activePage) * output->m_textPageSize;
+  const uint32_t startOffset = (output->m_startAddress << 1); // in text, addressing in words
 
-  uint8_t const *src = device->m_vram + pageBase + startOffset + (textRow * textCols * 2);
+  uint8_t const *src = output->m_vram + pageBase + startOffset + (textRow * textCols * 2);
 #endif
 
-  uint8_t *LUT = device->m_rawPixelLUT;
+  uint8_t *LUT = output->m_rawPixelLUT;
 
-  bool showCursor = device->m_cursorEnabled && device->m_cursorRow == textRow && ((device->m_frameCounter & 0x1f) < 0xf);
-  int cursorCol = device->m_cursorCol;
+  bool showCursor = output->m_cursorEnabled && output->m_cursorRow == textRow && ((output->m_frameCounter & 0x1f) < 0xf);
+  int cursorCol = output->m_cursorCol;
 
-  bool bit7blink = device->blinkEnabled;
-  bool blinktime = bit7blink && !((device->m_frameCounter & 0x3f) < 0x1f);
+  bool bit7blink = output->blinkEnabled;
+  bool blinktime = bit7blink && !((output->m_frameCounter & 0x3f) < 0x1f);
 
   for (int textCol = 0; textCol < textCols; textCol++) {
 
@@ -1010,7 +1013,7 @@ void IRAM_ATTR VideoScanout::drawScanline_mda_80x25(void *ctx, uint8_t *dst, int
 
     if (showCursor && textCol == cursorCol) {
 
-      uint8_t const *p_cursorBitmap = device->m_cursorGlyph + (charScanline * charBytes);
+      uint8_t const *p_cursorBitmap = output->m_cursorGlyph + (charScanline * charBytes);
 
       if (charAttr == 0) { // Show always a cursor (when no attribute was defined)
       	colors[1] = blink ? bg : LUT[0x07];
@@ -1062,19 +1065,38 @@ void IRAM_ATTR VideoScanout::drawScanline_cga_320x200x4(void *ctx, uint8_t *dst,
   constexpr int pixelsLine = 320;                    // Pixels per scan line (m_width)
   constexpr int pixelsByte = 4;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
+  constexpr uint32_t vramMask = 0x3FFF;              // 16 KB = 0x3FFF
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
+
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
+    output->m_startAddress = adapter->startAddress(); // in words
   }
 
+#if 0
   // Offset 0x0000 for even scan lines (bit 0=0), lines 0, 2, 4...
   // Offset 0x2000 for odd scan lines  (bit 0=1), lines 1, 3, 5...
-  auto src = device->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
+  auto src = output->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
+#else
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+
+  // CGA planar banking:
+  // - even scanlines go to bank 0 (offset 0x0000)
+  // - odd scanlines go to bank 1 (offset 0x2000)
+  const uint32_t bankOffset = (scanLine & 1) << 13; // 0x2000 if odd
+  const uint32_t lineOffset = bytesLine * (scanLine >> 1);
+
+  const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
+
+  uint8_t *src = output->m_vram + offset;
+#endif
 
   uint32_t *dst32 = (uint32_t *) dst;
-  uint32_t *LUT32 = (uint32_t *) device->m_rawPixelLUT;
+  uint32_t *LUT32 = (uint32_t *) output->m_rawPixelLUT;
 
   for (int i = 0; i < pixelsLine; i += pixelsByte) {
     *dst32++ = LUT32[*src++];
@@ -1086,19 +1108,38 @@ void IRAM_ATTR VideoScanout::drawScanline_cga_640x200x2(void *ctx, uint8_t *dst,
   constexpr int pixelsLine = 640;                    // Pixels per scanline (m_width)
   constexpr int pixelsByte = 8;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
+  constexpr uint32_t vramMask = 0x3FFF;              // 16 KB = 0x3FFF
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
+
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
+    output->m_startAddress = adapter->startAddress(); // in words
   }
 
+#if 0
   // Offset 0x0000 for even scan lines (bit 0=0), lines 0, 2, 4...
   // Offset 0x2000 for odd scan lines  (bit 0=1), lines 1, 3, 5...
-  auto src = device->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
+  auto src = output->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
+#else
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+
+  // CGA planar banking:
+  // - even scanlines go to bank 0 (offset 0x0000)
+  // - odd scanlines go to bank 1 (offset 0x2000)
+  const uint32_t bankOffset = (scanLine & 1) << 13; // 0x2000 if odd
+  const uint32_t lineOffset = bytesLine * (scanLine >> 1);
+
+  const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
+
+  uint8_t *src = output->m_vram + offset;
+#endif
 
   uint64_t *dst64 = (uint64_t *) dst;
-  uint64_t *LUT64 = (uint64_t *) device->m_rawPixelLUT;
+  uint64_t *LUT64 = (uint64_t *) output->m_rawPixelLUT;
 
   for (int i = 0; i < pixelsLine; i += pixelsByte) {
     *dst64++ = LUT64[*src++];
@@ -1110,21 +1151,41 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_320x200x16(void *ctx, uint8_t *d
   constexpr int pixelsLine = 320;                    // Pixels per scan line (m_width)
   constexpr int pixelsByte = 2;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
+  constexpr uint32_t vramMask = 0x7FFF;              // 32 KB - 1 (Tandy VRAM size)
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
+
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
+    output->m_startAddress = adapter->startAddress(); // in words
   }
 
+#if 0
   const uint32_t bank_order[] = {2, 3, 0, 1};
   const uint32_t bank = bank_order[scanLine & 3];
   //const uint32_t bank = scanLine & 3;
   const uint32_t row = scanLine >> 2;
-  auto src = device->m_vram + (bank << 13) + (row * bytesLine);
+  auto src = output->m_vram + (bank << 13) + (row * bytesLine);
+#else
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+
+  // Tandy 4‑bank interleaving
+  const uint32_t bank_order[] = {2, 3, 0, 1};
+  const uint32_t bank = bank_order[scanLine & 3];
+  const uint32_t row = scanLine >> 2;
+  const uint32_t bankOffset = bank << 13;      // 8KB per bank (8192 bytes)
+  const uint32_t lineOffset = row * bytesLine;
+
+  const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
+
+  uint8_t *src = output->m_vram + offset;
+#endif
 
 #if 0
-  uint8_t *LUT = device->m_rawPixelLUT;
+  uint8_t *LUT = output->m_rawPixelLUT;
 
   for (int i = 0; i < bytesLine; i += 2) {
     const uint8_t b0 = *src++; // pixels 0 y 1
@@ -1138,7 +1199,7 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_320x200x16(void *ctx, uint8_t *d
   }
 #else
   // Cast the shared LUT to 32-bit entries locally
-  const uint32_t *LUT32 = (const uint32_t *) device->m_rawPixelLUT;
+  const uint32_t *LUT32 = (const uint32_t *) output->m_rawPixelLUT;
 
   // Destination is naturally dword-aligned
   uint32_t *dst32 = (uint32_t *) dst;
@@ -1161,19 +1222,41 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_640x200x4(void *ctx, uint8_t *ds
   constexpr int pixelsLine = 640;                    // Pixels per scan line (m_width)
   constexpr int pixelsByte = 4;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
+  constexpr uint32_t vramMask = 0x7FFF;              // 32 KB - 1 (Tandy VRAM size)
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
+
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
+    output->m_startAddress = adapter->startAddress(); // in words
   }
 
-  // Offset 0x0000 for even scan lines (bit 0=0), lines 0, 2, 4...
-  // Offset 0x2000 for odd scan lines  (bit 0=1), lines 1, 3, 5...
-  auto src = device->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
+#if 0
+  const uint32_t bank_order[] = {2, 3, 0, 1};
+  const uint32_t bank = bank_order[scanLine & 3];
+  //const uint32_t bank = scanLine & 3;
+  const uint32_t row = scanLine >> 2;
+  auto src = output->m_vram + (bank << 13) + (row * bytesLine);
+#else
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+
+  // Tandy 4‑bank interleaving
+  const uint32_t bank_order[] = {2, 3, 0, 1};
+  const uint32_t bank = bank_order[scanLine & 3];
+  const uint32_t row = scanLine >> 2;
+  const uint32_t bankOffset = bank << 13;      // 8KB per bank (8192 bytes)
+  const uint32_t lineOffset = row * bytesLine;
+
+  const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
+
+  uint8_t *src = output->m_vram + offset;
+#endif
 
   uint32_t *dst32 = (uint32_t *) dst;
-  uint32_t *LUT32 = (uint32_t *) device->m_rawPixelLUT;
+  uint32_t *LUT32 = (uint32_t *) output->m_rawPixelLUT;
 
   for (int i = 0; i < pixelsLine; i += pixelsByte) {
     *dst32++ = LUT32[*src++];
@@ -1186,25 +1269,27 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_320x200x16(void *ctx, uint8_t *dst
   constexpr int pixelsByte = 8;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
 
-    auto vcard = (ScanoutContext *) device->m_context;
-  	device->m_startAddress = 0;//vcard->startAddress();
-  	device->m_colorPlaneEnable = 0x0f;//vcard->colorPlaneEnable();
+    ScanoutContext *adapter = output->m_context;
+  	output->m_startAddress = adapter->startAddress(); // in words
+  	output->m_colorPlaneEnable = adapter->colorPlaneEnable();
   }
 
-  const uint32_t offset = device->m_startAddress + scanLine * bytesLine;
+  const uint32_t vramMask = output->m_vramSize - 1;
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t offset = (base + scanLine * bytesLine) & vramMask;
 
-  const uint8_t *plane0 = device->m_plane[0] + offset;
-  const uint8_t *plane1 = device->m_plane[1] + offset;
-  const uint8_t *plane2 = device->m_plane[2] + offset;
-  const uint8_t *plane3 = device->m_plane[3] + offset;
+  const uint8_t *plane0 = output->m_plane[0] + offset;
+  const uint8_t *plane1 = output->m_plane[1] + offset;
+  const uint8_t *plane2 = output->m_plane[2] + offset;
+  const uint8_t *plane3 = output->m_plane[3] + offset;
 
   // Cache plane enable mask
-  const uint8_t colorPlaneEnable = device->m_colorPlaneEnable;
+  const uint8_t colorPlaneEnable = output->m_colorPlaneEnable;
 
   const bool p0en = (colorPlaneEnable & 0x1) != 0;
   const bool p1en = (colorPlaneEnable & 0x2) != 0;
@@ -1212,7 +1297,7 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_320x200x16(void *ctx, uint8_t *dst
   const bool p3en = (colorPlaneEnable & 0x8) != 0;
 
   // Cache LUTs
-  const uint8_t *LUT = device->m_rawPixelLUT;
+  const uint8_t *LUT = output->m_rawPixelLUT;
 
   const uint32_t *LUT_H0 = m_egaLUT_H[0];
   const uint32_t *LUT_H1 = m_egaLUT_H[1];
@@ -1246,48 +1331,6 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_320x200x16(void *ctx, uint8_t *dst
     *dst++ = LUT[pixel_L[2]];
     *dst++ = LUT[pixel_L[3]];
   }
-
-/*
-  const uint32_t offset = device->m_startAddress + scanLine * bytesLine;
-
-  const uint32_t *plane0 = (uint32_t *) (device->m_plane[0] + offset);
-  const uint32_t *plane1 = (uint32_t *) (device->m_plane[1] + offset);
-  const uint32_t *plane2 = (uint32_t *) (device->m_plane[2] + offset);
-  const uint32_t *plane3 = (uint32_t *) (device->m_plane[3] + offset);
-
-  int x = 0;
-
-  for (int i = 0; i < bytesLine / 4; i++) {
-  	const uint32_t p0 = colorPlane0Enable ? 0 : plane0[i];
-    const uint32_t p1 = colorPlane1Enable ? 0 : plane1[i];
-    const uint32_t p2 = colorPlane2Enable ? 0 : plane2[i];
-    const uint32_t p3 = colorPlane3Enable ? 0 : plane3[i];
-
-    for (int j = 0; j < 4; j++) {
-      const uint8_t b0 = (p0 >> (j * 8)) & 0xFF;
-      const uint8_t b1 = (p1 >> (j * 8)) & 0xFF;
-      const uint8_t b2 = (p2 >> (j * 8)) & 0xFF;
-      const uint8_t b3 = (p3 >> (j * 8)) & 0xFF;
-
-      uint32_t pixels_H = m_egaLUT_H[0][b0] | m_egaLUT_H[1][b1] | m_egaLUT_H[2][b2] | m_egaLUT_H[3][b3];
-      uint32_t pixels_L = m_egaLUT_L[0][b0] | m_egaLUT_L[1][b1] | m_egaLUT_L[2][b2] | m_egaLUT_L[3][b3];
-
-      uint8_t *ph = (uint8_t *) &pixels_H;
-      uint8_t *pl = (uint8_t *) &pixels_L;
-
-      dst[x + 0] = LUT[ph[0]];
-      dst[x + 1] = LUT[ph[1]];
-      dst[x + 2] = LUT[ph[2]];
-      dst[x + 3] = LUT[ph[3]];
-
-      dst[x + 4] = LUT[pl[0]];
-      dst[x + 5] = LUT[pl[1]];
-      dst[x + 6] = LUT[pl[2]];
-      dst[x + 7] = LUT[pl[3]];
-      x += 8;
-	}
-  }
-*/
 }
 
 void IRAM_ATTR VideoScanout::drawScanline_ega_640x200x16(void *ctx, uint8_t *dst, int scanLine)
@@ -1296,26 +1339,28 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x200x16(void *ctx, uint8_t *dst
   constexpr int pixelsByte = 8;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
 
-    auto vcard = (ScanoutContext *) device->m_context;
-  	device->m_startAddress = vcard->startAddress();
-  	device->m_colorPlaneEnable = vcard->colorPlaneEnable();
+    ScanoutContext *adapter = output->m_context;
+  	output->m_startAddress = adapter->startAddress(); // in words
+  	output->m_colorPlaneEnable = adapter->colorPlaneEnable();
   }
 
-  const uint32_t offset = device->m_startAddress + scanLine * bytesLine;
+  const uint32_t vramMask = output->m_vramSize - 1;
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t offset = (base + scanLine * bytesLine) & vramMask;
 
   // Cache planes locally (register-friendly
-  const uint8_t *plane0 = device->m_plane[0] + offset;
-  const uint8_t *plane1 = device->m_plane[1] + offset;
-  const uint8_t *plane2 = device->m_plane[2] + offset;
-  const uint8_t *plane3 = device->m_plane[3] + offset;
+  const uint8_t *plane0 = output->m_plane[0] + offset;
+  const uint8_t *plane1 = output->m_plane[1] + offset;
+  const uint8_t *plane2 = output->m_plane[2] + offset;
+  const uint8_t *plane3 = output->m_plane[3] + offset;
 
   // Cache plane enable mask
-  const uint8_t colorPlaneEnable = device->m_colorPlaneEnable;
+  const uint8_t colorPlaneEnable = output->m_colorPlaneEnable;
 
   const bool p0en = (colorPlaneEnable & 0x1) != 0;
   const bool p1en = (colorPlaneEnable & 0x2) != 0;
@@ -1323,7 +1368,7 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x200x16(void *ctx, uint8_t *dst
   const bool p3en = (colorPlaneEnable & 0x8) != 0;
 
   // Cache LUTs
-  const uint8_t *LUT = device->m_rawPixelLUT;
+  const uint8_t *LUT = output->m_rawPixelLUT;
 
   const uint32_t *LUT_H0 = m_egaLUT_H[0];
   const uint32_t *LUT_H1 = m_egaLUT_H[1];
@@ -1364,29 +1409,30 @@ void IRAM_ATTR VideoScanout::drawScanline_mda_720x348x2(void *ctx, uint8_t *dst,
   constexpr int pixelsLine = 720;            // Pixels per scan line (m_width)
   constexpr int bytesLine  = pixelsLine / 8; // Bytes per line
   constexpr int bankSize   = 0x2000;
+  constexpr uint32_t vramMask = 0xFFFF;      // 64KB - 1
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
+
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
+    output->m_startAddress = adapter->startAddress(); // in words
   }
 
-  // Ensure LUT exists (built in updateLUT when width/height match)
-  const uint64_t *LUT64 = (uint64_t *) device->m_rawPixelLUT;
-
-  // Base offset (bytes) derived from CRTC start address (words -> bytes).
-  // This lets you flip between page0/page1 by setting startAddress to 0x0000/0x8000 (bytes).
-  const uint32_t startWords = device->m_context ? device->m_context->startAddress() : 0;
-  const uint32_t base = (startWords << 1) & 0xFFFF;
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
 
   // Hercules graphics interleaving: 4 banks of 0x2000 bytes, selected by (y & 3)
-  const uint32_t bank = (uint32_t) scanLine & 3u;
+  const uint32_t bank = (uint32_t) scanLine & 3;
   const uint32_t row  = (uint32_t) scanLine >> 2;
-  const uint32_t offs = base + bank * bankSize + row * bytesLine;
+  const uint32_t offset = (base + bank * bankSize + row * bytesLine) & vramMask;
 
-  const uint8_t *src = device->m_vram + (offs & 0xFFFF);
+  const uint8_t *src = output->m_vram + offset;
 
   uint64_t *dst64 = (uint64_t *) dst;
+  uint64_t *LUT64 = (uint64_t *) output->m_rawPixelLUT;
+
   for (int i = 0; i < bytesLine; ++i) {
     *dst64++ = LUT64[*src++];
   }
@@ -1398,26 +1444,28 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x350x16(void *ctx, uint8_t *dst
   constexpr int pixelsByte = 8;                      // Pixels per byte
   constexpr int bytesLine = pixelsLine / pixelsByte; // Bytes per line
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
 
-    auto vcard = (ScanoutContext *) device->m_context;
-  	device->m_startAddress = vcard->startAddress();
-  	device->m_colorPlaneEnable = vcard->colorPlaneEnable();
+    ScanoutContext *adapter = output->m_context;
+  	output->m_startAddress = adapter->startAddress(); // in words
+  	output->m_colorPlaneEnable = adapter->colorPlaneEnable();
   }
 
-  const uint32_t offset = device->m_startAddress + scanLine * bytesLine;
+  const uint32_t vramMask = output->m_vramSize - 1;
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t offset = (base + scanLine * bytesLine) & vramMask;
 
   // Cache planes locally (register-friendly
-  const uint8_t *plane0 = device->m_plane[0] + offset;
-  const uint8_t *plane1 = device->m_plane[1] + offset;
-  const uint8_t *plane2 = device->m_plane[2] + offset;
-  const uint8_t *plane3 = device->m_plane[3] + offset;
+  const uint8_t *plane0 = output->m_plane[0] + offset;
+  const uint8_t *plane1 = output->m_plane[1] + offset;
+  const uint8_t *plane2 = output->m_plane[2] + offset;
+  const uint8_t *plane3 = output->m_plane[3] + offset;
 
   // Cache plane enable mask
-  const uint8_t colorPlaneEnable = device->m_colorPlaneEnable;
+  const uint8_t colorPlaneEnable = output->m_colorPlaneEnable;
 
   const bool p0en = (colorPlaneEnable & 0x1) != 0;
   const bool p1en = (colorPlaneEnable & 0x2) != 0;
@@ -1425,7 +1473,7 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x350x16(void *ctx, uint8_t *dst
   const bool p3en = (colorPlaneEnable & 0x8) != 0;
 
   // Cache LUTs
-  const uint8_t *LUT = device->m_rawPixelLUT;
+  const uint8_t *LUT = output->m_rawPixelLUT;
 
   const uint32_t *LUT_H0 = m_egaLUT_H[0];
   const uint32_t *LUT_H1 = m_egaLUT_H[1];
@@ -1463,18 +1511,30 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x350x16(void *ctx, uint8_t *dst
 void IRAM_ATTR VideoScanout::drawScanline_mcga_320x200x256(void *ctx, uint8_t *dst, int scanLine)
 {
   constexpr int pixelsLine = 320;       // Pixels per scan line (m_width)
-  constexpr int bytesLine = pixelsLine; // Bytes per line
+  constexpr uint32_t vramMask = 0xFFFF; // 64KB - 1
 
-  auto device = (VideoScanout *) ctx;
+  auto output = (VideoScanout *) ctx;
 
-  if ((scanLine == 0) && (device->m_state == State::Running)) {
-    device->m_frameCounter++;
+  if ((scanLine == 0) && (output->m_state == State::Running)) {
+    output->m_frameCounter++;
+
+    // Video adapter context
+    ScanoutContext *adapter = output->m_context;
+    output->m_startAddress = adapter->startAddress(); // in words
   }
 
-  auto src = device->m_vram + bytesLine * scanLine;
+#if 0
+  auto src = output->m_vram + bytesLine * scanLine;
+#else
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t offset = (base + pixelsLine * scanLine) & vramMask;
 
-  uint8_t *LUT = device->m_rawPixelLUT;
+  uint8_t *src = output->m_vram + offset;
+#endif
 
+  uint8_t *LUT = output->m_rawPixelLUT;
+
+#if 0
   for (int i = 0; i < pixelsLine; i += 4) {
     *(dst + 0) = LUT[*(src + 2)];
     *(dst + 1) = LUT[*(src + 3)];
@@ -1483,10 +1543,44 @@ void IRAM_ATTR VideoScanout::drawScanline_mcga_320x200x256(void *ctx, uint8_t *d
     dst += 4;
     src += 4;
   }
+#else
+  for (int i = 0; i < pixelsLine; i += 16) {
+    // Load four 32-bit words (16 bytes total) from VRAM
+    uint32_t v0 = *(uint32_t*)(src + 0);
+    uint32_t v1 = *(uint32_t*)(src + 4);
+    uint32_t v2 = *(uint32_t*)(src + 8);
+    uint32_t v3 = *(uint32_t*)(src + 12);
+
+    uint8_t *d = dst + i;
+
+    // Reordering pattern required by VGADirectController internal byte packing
+    d[0] = LUT[(v0 >> 16) & 0xFF];
+    d[1] = LUT[(v0 >> 24) & 0xFF];
+    d[2] = LUT[(v0 >>  0) & 0xFF];
+    d[3] = LUT[(v0 >>  8) & 0xFF];
+
+    d[4] = LUT[(v1 >> 16) & 0xFF];
+    d[5] = LUT[(v1 >> 24) & 0xFF];
+    d[6] = LUT[(v1 >>  0) & 0xFF];
+    d[7] = LUT[(v1 >>  8) & 0xFF];
+
+    d[8] = LUT[(v2 >> 16) & 0xFF];
+    d[9] = LUT[(v2 >> 24) & 0xFF];
+    d[10]= LUT[(v2 >>  0) & 0xFF];
+    d[11]= LUT[(v2 >>  8) & 0xFF];
+
+    d[12]= LUT[(v3 >> 16) & 0xFF];
+    d[13]= LUT[(v3 >> 24) & 0xFF];
+    d[14]= LUT[(v3 >>  0) & 0xFF];
+    d[15]= LUT[(v3 >>  8) & 0xFF];
+
+    src += 16;
+  }
+#endif
 }
 
 inline __attribute__((always_inline))
-void drawOSDVolume(VideoScanout *device, int pixelsLine, int scanLines, int charScanline, int textRow, uint8_t *dst)
+void drawOSDVolume(VideoScanout *output, int pixelsLine, int scanLines, int charScanline, int textRow, uint8_t *dst)
 {
   constexpr int charWidth  = 8;
   constexpr int charHeight = 8;
@@ -1527,9 +1621,9 @@ void drawOSDVolume(VideoScanout *device, int pixelsLine, int scanLines, int char
   // Block start X (right-aligned with margin)
   const int osdStartX = (pixelsLine - rightMargin - blockWidth) & ~7;
 
-  const uint8_t bg  = device->m_OSD_rawPixelBg;  // background (black)
-  const uint8_t fgH = device->m_OSD_rawPixelFgH; // bright foreground (yellow)
-  const uint8_t fgL = device->m_OSD_rawPixelFgL; // light foreground (light gray)
+  const uint8_t bg  = output->m_OSD_rawPixelBg;  // background (black)
+  const uint8_t fgH = output->m_OSD_rawPixelFgH; // bright foreground (yellow)
+  const uint8_t fgL = output->m_OSD_rawPixelFgL; // light foreground (light gray)
 
   if (textRow == 0) { // Row 0: Draw "VOLUME"
 
@@ -1543,7 +1637,7 @@ void drawOSDVolume(VideoScanout *device, int pixelsLine, int scanLines, int char
     // Precompute glyph base pointers (no STL)
     const uint8_t *glyph[textLen];
     for (int c = 0; c < textLen; c++)
-      glyph[c] = device->m_font.data + (int) text[c] * charSize;
+      glyph[c] = output->m_font.data + (int) text[c] * charSize;
 
     // Draw the `scanLines` physical scanlines of this callback
     for (int sl = 0; sl < scanLines; sl++) {
@@ -1571,7 +1665,7 @@ void drawOSDVolume(VideoScanout *device, int pixelsLine, int scanLines, int char
     }
   } else if (textRow == 1) { // --- ROW 1: Draw stripes meter ---
 
-    const int activeLines = (device->m_OSD_volumeLevel * totalColorLines) / 127;
+    const int activeLines = (output->m_OSD_volumeLevel * totalColorLines) / 127;
 
     for (int sl = 0; sl < scanLines; sl++) {
       uint8_t *row = dstBase + sl * pixelsLine;
@@ -1599,7 +1693,7 @@ void drawOSDVolume(VideoScanout *device, int pixelsLine, int scanLines, int char
 }
 
 inline __attribute__((always_inline))
-void drawOSDPause(VideoScanout *device, int pixelsLine, int scanLines, int charScanline, int textRow, uint8_t *dst)
+void drawOSDPause(VideoScanout *output, int pixelsLine, int scanLines, int charScanline, int textRow, uint8_t *dst)
 {
   constexpr int charWidth  = 8;
   constexpr int charHeight = 8;
@@ -1637,8 +1731,8 @@ void drawOSDPause(VideoScanout *device, int pixelsLine, int scanLines, int charS
     return;
 
   // Colors
-  const uint8_t fg = device->m_OSD_rawPixelFgH; // foreground (use same as volume/yellow)
-  const uint8_t bg = device->m_OSD_rawPixelBg;  // background (black)
+  const uint8_t fg = output->m_OSD_rawPixelFgH; // foreground (use same as volume/yellow)
+  const uint8_t bg = output->m_OSD_rawPixelBg;  // background (black)
 
   // Bit-to-pixel mapping used by your main text renderer:
   // p[0]=0x20, p[1]=0x10, p[2]=0x80, p[3]=0x40, p[4]=0x02, p[5]=0x01, p[6]=0x08, p[7]=0x04
@@ -1652,7 +1746,7 @@ void drawOSDPause(VideoScanout *device, int pixelsLine, int scanLines, int charS
   // Precompute glyph pointers
   const uint8_t *glyph[textLen];
   for (int c = 0; c < textLen; ++c)
-    glyph[c] = device->m_font.data + (int)text[c] * charSize;
+    glyph[c] = output->m_font.data + (int)text[c] * charSize;
 
   // Draw the 4 physical scanlines of this callback
   for (int sl = 0; sl < scanLines; ++sl) {

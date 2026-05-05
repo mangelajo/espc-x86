@@ -136,6 +136,7 @@ private:
   // Video Memory
   uint8_t *m_vram;     // Linear (CGA)
   uint8_t *m_plane[4]; // Planar (EGA)
+  uint32_t m_vramSize;
 
   uint32_t m_startAddress;
   uint16_t m_lineOffset;

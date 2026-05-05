@@ -44,7 +44,7 @@ public:
   virtual uint8_t *plane(uint8_t index) { return nullptr; }
 
   // Total VRAM size in bytes, used for address wrapping
-  virtual size_t vramSize() = 0;
+  virtual uint32_t vramSize() = 0;
 
   // CRTC start address, expressed in words
   virtual uint32_t startAddress() = 0;

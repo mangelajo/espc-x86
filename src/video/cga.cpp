@@ -278,6 +278,7 @@ void CGA::handleInt10h()
 
       // Start addres (in words)
       m_startAddress = ((uint16_t) page * m_textPageSize) >> 1;
+      printf("cga: Start address = 0x%04x (active page = %d)\n", m_startAddress, m_activePage);
 
       const uint8_t addr_hi = (uint8_t) ((m_startAddress >> 8) & 0xFF);
       const uint8_t addr_lo = (uint8_t) ( m_startAddress       & 0xFF);

@@ -1739,7 +1739,6 @@ void EGA::setMode(uint8_t mode)
   // Sequencer
   m_mapMask           = m_seq[EGA_SEQ_MAPMASK] & 0x0F;
   m_oddEvenAddressing = (m_seq[EGA_SEQ_MEMMODE] & 0x04) != 0;
-printf("ega: DEBUG m_oddEvenAddressing=0x%02x\n", m_oddEvenAddressing);
 
   // Graphics Controller
   m_gc_setReset       = m_gc[EGA_GC_SETRESET] & 0x0F;
@@ -1784,8 +1783,13 @@ printf("ega: DEBUG m_oddEvenAddressing=0x%02x\n", m_oddEvenAddressing);
 
   // Cursor Shape and Visible
   m_cursorDisable = false;
+#if 0
   m_cursorStart = 0x0D;
   m_cursorEnd = 0x0F;
+#else
+  m_cursorStart = 0x06;
+  m_cursorEnd = 0x07;
+#endif
 
   m_crtc[EGA_CRTC_CURSORSTART] = m_cursorStart | (m_cursorDisable ? 0x20 : 0x00);
   m_crtc[EGA_CRTC_CURSOREND]   = m_cursorEnd;
