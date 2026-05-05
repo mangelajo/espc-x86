@@ -96,6 +96,12 @@ void MCGA::reset()
 
 void MCGA::initPalette()
 {
+  // The VGA default palette in the 256 colour mode (Mode 13h) first has
+  // 16 color entries from CGA. Next 16 color entries are 16 shades of gray.
+  // And the next 216 color entries are sets of 24 hues, in 3 different
+  // saturation values, and in 3 different brightness values (24x3x3 = 216).
+
+#if 0
   // --- PART 1: Standard CGA colors (0-15) ---
   // Mapping the 16 classic colors using your provided CGA_palette
   for (int i = 0; i < 16; i++) {
@@ -121,6 +127,67 @@ void MCGA::initPalette()
         
     MCGA_palette[i] = RGB222(r, g, b);
   }
+#else
+  // Default 6‑bit RGB values for MCGA/VGA mode 0x13 (0-63)
+  // First 32 entries: 16 CGA colors + 16 grayscale levels
+  static const uint8_t defaultPalette[32][3] = {
+    // 0-15: Standard CGA/EGA colors
+    {0x00, 0x00, 0x00}, {0x00, 0x00, 0x2A}, {0x00, 0x2A, 0x00}, {0x00, 0x2A, 0x2A},
+    {0x2A, 0x00, 0x00}, {0x2A, 0x00, 0x2A}, {0x2A, 0x2A, 0x00}, {0x2A, 0x2A, 0x2A},
+    {0x00, 0x00, 0x15}, {0x00, 0x00, 0x3F}, {0x00, 0x2A, 0x15}, {0x00, 0x2A, 0x3F},
+    {0x2A, 0x00, 0x15}, {0x2A, 0x00, 0x3F}, {0x2A, 0x2A, 0x15}, {0x2A, 0x2A, 0x3F},
+    // 16-31: Grayscale ramp (16 levels)
+    {0x00, 0x00, 0x00}, {0x14, 0x14, 0x14}, {0x20, 0x20, 0x20}, {0x2C, 0x2C, 0x2C},
+    {0x38, 0x38, 0x38}, {0x45, 0x45, 0x45}, {0x51, 0x51, 0x51}, {0x61, 0x61, 0x61},
+    {0x71, 0x71, 0x71}, {0x82, 0x82, 0x82}, {0x92, 0x92, 0x92}, {0xA2, 0xA2, 0xA2},
+    {0xB6, 0xB6, 0xB6}, {0xCB, 0xCB, 0xCB}, {0xE3, 0xE3, 0xE3}, {0xFF, 0xFF, 0xFF}
+  };
+
+  // Copy first 32 entries into the DAC palette and convert to RGB222
+  for (int i = 0; i < 32; i++) {
+    m_dacPalette[i][0] = defaultPalette[i][0];
+    m_dacPalette[i][1] = defaultPalette[i][1];
+    m_dacPalette[i][2] = defaultPalette[i][2];
+
+    // Convert 6‑bit (0-63) to 2‑bit (0-3) using truncation
+    uint8_t r2 = (m_dacPalette[i][0] * 3) >> 6;
+    uint8_t g2 = (m_dacPalette[i][1] * 3) >> 6;
+    uint8_t b2 = (m_dacPalette[i][2] * 3) >> 6;
+    MCGA_palette[i] = RGB222(r2, g2, b2);
+  }
+
+  // Generate entries 32-247: a 6x6x6 RGB cube (216 colors)
+  int idx = 32;
+  for (int r = 0; r < 6; r++) {
+    for (int g = 0; g < 6; g++) {
+      for (int b = 0; b < 6; b++) {
+        // Map 0‑5 to 0‑63 linearly
+        uint8_t r6 = (r * 63) / 5;
+        uint8_t g6 = (g * 63) / 5;
+        uint8_t b6 = (b * 63) / 5;
+
+        m_dacPalette[idx][0] = r6;
+        m_dacPalette[idx][1] = g6;
+        m_dacPalette[idx][2] = b6;
+
+        uint8_t r2 = (r6 * 3) >> 6;
+        uint8_t g2 = (g6 * 3) >> 6;
+        uint8_t b2 = (b6 * 3) >> 6;
+        MCGA_palette[idx] = RGB222(r2, g2, b2);
+
+        idx++;
+      }
+    }
+  }
+
+  // Entries 248-255: black (already zero by static initialization, but set explicitly)
+  for (int i = 248; i < 256; i++) {
+    m_dacPalette[i][0] = 0;
+    m_dacPalette[i][1] = 0;
+    m_dacPalette[i][2] = 0;
+    MCGA_palette[i] = RGB222(0, 0, 0);
+  }
+#endif
 }
 
 void MCGA::resetRegisters()
@@ -322,7 +389,11 @@ void MCGA::handleInt10h()
       m_activePage = page;
 
       // Start addres (in words)
+      const uint16_t oldAddr = m_startAddress;
       m_startAddress = ((uint16_t) page * m_textPageSize) >> 1;
+      if (m_startAddress != oldAddr) {
+        printf("mcga: Start address = 0x%04x (active page %d)\n", m_startAddress, m_activePage);
+      }
 
       const uint8_t addr_hi = (uint8_t) ((m_startAddress >> 8) & 0xFF);
       const uint8_t addr_lo = (uint8_t) ( m_startAddress       & 0xFF);
@@ -508,20 +579,30 @@ void MCGA::handleInt10h()
         case 0x10:
         {
           const uint8_t index = i8086::BL();
+          const uint8_t r6    = i8086::DH() & 0x3F; // Red component
+          const uint8_t g6    = i8086::CH() & 0x3F; // Green component
+          const uint8_t b6    = i8086::CL() & 0x3F; // Blue component
 
-          m_dacPalette[index][0] = i8086::DH() & 0x3F; // Red component
-          m_dacPalette[index][1] = i8086::CH() & 0x3F; // Green component
-          m_dacPalette[index][2] = i8086::CL() & 0x3F; // Blue component
+          m_dacPalette[index][0] = r6;
+          m_dacPalette[index][1] = g6;
+          m_dacPalette[index][2] = b6;
 
-          //TODO Convert VGA 6-bit DAC values (0-63) to RGB222 (0-3) used by VGA32
+#if 0
+          // Convert VGA 6-bit DAC values (0-63) to RGB222 (0-3) used by VGA32
           // with rounding: r2 = round(r6 * 3 / 63)
           const uint8_t r2 = (uint8_t) (((uint16_t) m_dacPalette[index][0] * 3 + 31) / 63);
           const uint8_t g2 = (uint8_t) (((uint16_t) m_dacPalette[index][1] * 3 + 31) / 63);
           const uint8_t b2 = (uint8_t) (((uint16_t) m_dacPalette[index][2] * 3 + 31) / 63);
+#else
+          // truncation
+          const uint8_t r2 = (r6 * 3) >> 6;
+          const uint8_t g2 = (g6 * 3) >> 6;
+          const uint8_t b2 = (b6 * 3) >> 6;
+#endif
 
           // Update the scanout palette (index -> RGB222)
           MCGA_palette[index] = RGB222(r2, g2, b2);
-          //TODO m_video->updateLUT();
+          m_video->updateLUT();
 
           i8086::setFlagCF(false);
           break;
@@ -542,14 +623,24 @@ void MCGA::handleInt10h()
           for (uint16_t i = 0; i < count; i++) {
             const uint8_t index = (start + i) & 0xFF; 
 
-            // Read 6-bit VGA DAC values from memory
-            m_dacPalette[index][0] = s_ram[addr++] & 0x3F; // Red
-            m_dacPalette[index][1] = s_ram[addr++] & 0x3F; // Green
-            m_dacPalette[index][2] = s_ram[addr++] & 0x3F; // Blue
+            // Read 6‑bit RGB values from system memory
+            const uint8_t r6 = s_ram[addr++] & 0x3F;
+            const uint8_t g6 = s_ram[addr++] & 0x3F;
+            const uint8_t b6 = s_ram[addr++] & 0x3F;
+
+            m_dacPalette[index][0] = r6;
+            m_dacPalette[index][1] = g6;
+            m_dacPalette[index][2] = b6;
+
+            // Convert to RGB222
+            const uint8_t r2 = (r6 * 3) >> 6;
+            const uint8_t g2 = (g6 * 3) >> 6;
+            const uint8_t b2 = (b6 * 3) >> 6;
+
+            MCGA_palette[index] = RGB222(r2, g2, b2);
           }
 
-          // TODO: convert updated DAC palette to RGB222
-          // and rebuild the 256->16 reduction LUT if needed
+          m_video->updateLUT();
 
           i8086::setFlagCF(false);
           break;

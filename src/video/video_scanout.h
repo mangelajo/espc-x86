@@ -139,7 +139,6 @@ private:
   uint32_t m_vramSize;
 
   uint32_t m_startAddress;
-  uint16_t m_lineOffset;
   uint16_t m_textPageSize;
   uint8_t m_activePage;
 

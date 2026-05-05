@@ -48,7 +48,6 @@ public:
 
   // CRTC start address, expressed in words
   virtual uint32_t startAddress() = 0;
-  virtual uint16_t lineOffset() { return 0; } // only for EGA
   virtual uint16_t textPageSize() = 0;
 
   virtual bool cursorEnabled() = 0;

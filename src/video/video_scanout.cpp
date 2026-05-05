@@ -61,7 +61,6 @@ VideoScanout::VideoScanout() :
   m_context(nullptr),
   m_vram(nullptr),
   m_startAddress(0),
-  m_lineOffset(0),
   m_textPageSize(0),
   m_activePage(0),
   m_cursorRow(0),
@@ -702,19 +701,12 @@ void IRAM_ATTR VideoScanout::drawScanline_text_40x25(void *ctx, uint8_t *dst, in
 
   uint8_t const *fontData = output->m_font.data + (charScanline * charBytes);
 
-#if 1
   // Note that in CGA video cards page base (m_activePage * m_textPageSize)
   // and m_startAddress are the SAME offset
   // const uint32_t pageBase = (uint32_t) output->m_activePage * output->m_textPageSize;
-  const uint32_t pageBase = (uint32_t) output->m_startAddress << 1; // words to bytes
-  uint8_t const *src = output->m_vram + pageBase + (textRow * textCols * 2);
-#else
-  const uint32_t pageBase = uint32_t(output->m_activePage) * output->m_textPageSize;
-  const uint32_t startOffset = (output->m_startAddress << 1); // in text, addressing in words
+  const uint32_t base = output->m_startAddress << 1; // words to bytes
 
-  uint8_t const *src = output->m_vram + pageBase + startOffset + (textRow * textCols * 2);
-#endif
-
+  uint8_t *src = output->m_vram + base + (textRow * textCols * 2);
   uint8_t *LUT = output->m_rawPixelLUT;
 
   bool showCursor = output->m_cursorEnabled && output->m_cursorRow == textRow && ((output->m_frameCounter & 0x1f) < 0xf);
@@ -832,19 +824,12 @@ void IRAM_ATTR VideoScanout::drawScanline_text_80x25(void *ctx, uint8_t *dst, in
 
   uint8_t const *fontData = output->m_font.data + (charScanline * charBytes);
 
-#if 1
   // Note that in CGA video cards page base (m_activePage * m_textPageSize)
   // and m_startAddress are the SAME offset
   // const uint32_t pageBase = (uint32_t) output->m_activePage * output->m_textPageSize;
-  uint32_t pageBase = (uint32_t) output->m_startAddress << 1; // words to bytes
-  uint8_t const *src = output->m_vram + pageBase + (textRow * textCols * 2);
-#else
-  const uint32_t pageBase = uint32_t(output->m_activePage) * output->m_textPageSize;
-  const uint32_t startOffset = (output->m_startAddress << 1); // in text, addressing in words
+  uint32_t base = output->m_startAddress << 1; // words to bytes
 
-  uint8_t const *src = output->m_vram + pageBase + startOffset + (textRow * textCols * 2);
-#endif
-
+  uint8_t *src = output->m_vram + base + (textRow * textCols * 2);
   uint8_t *LUT = output->m_rawPixelLUT;
 
   bool showCursor = output->m_cursorEnabled && output->m_cursorRow == textRow && ((output->m_frameCounter & 0x1f) < 0xf);
@@ -950,6 +935,7 @@ void IRAM_ATTR VideoScanout::drawScanline_mda_80x25(void *ctx, uint8_t *dst, int
   if ((scanLine == 0) && (output->m_state == State::Running)) {
     output->m_frameCounter++;
 
+    // Video adapter context
     ScanoutContext *adapter = output->m_context;
 
     output->m_startAddress = adapter->startAddress();
@@ -967,19 +953,12 @@ void IRAM_ATTR VideoScanout::drawScanline_mda_80x25(void *ctx, uint8_t *dst, int
 
   uint8_t const *fontData = output->m_font.data + (charScanline * charBytes);
 
-#if 1
   // Note that in CGA video cards page base (m_activePage * m_textPageSize)
   // and m_startAddress are the SAME offset
   // const uint32_t pageBase = (uint32_t) output->m_activePage * output->m_textPageSize;
-  uint32_t pageBase = (uint32_t) output->m_startAddress << 1; // words to bytes
-  uint8_t const *src = output->m_vram + pageBase + (textRow * textCols * 2);
-#else
-  const uint32_t pageBase = uint32_t(output->m_activePage) * output->m_textPageSize;
-  const uint32_t startOffset = (output->m_startAddress << 1); // in text, addressing in words
+  uint32_t base = output->m_startAddress << 1; // words to bytes
 
-  uint8_t const *src = output->m_vram + pageBase + startOffset + (textRow * textCols * 2);
-#endif
-
+  uint8_t *src = output->m_vram + base + (textRow * textCols * 2);
   uint8_t *LUT = output->m_rawPixelLUT;
 
   bool showCursor = output->m_cursorEnabled && output->m_cursorRow == textRow && ((output->m_frameCounter & 0x1f) < 0xf);
@@ -1074,15 +1053,10 @@ void IRAM_ATTR VideoScanout::drawScanline_cga_320x200x4(void *ctx, uint8_t *dst,
 
     // Video adapter context
     ScanoutContext *adapter = output->m_context;
-    output->m_startAddress = adapter->startAddress(); // in words
+    output->m_startAddress = adapter->startAddress();
   }
 
-#if 0
-  // Offset 0x0000 for even scan lines (bit 0=0), lines 0, 2, 4...
-  // Offset 0x2000 for odd scan lines  (bit 0=1), lines 1, 3, 5...
-  auto src = output->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
-#else
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
 
   // CGA planar banking:
   // - even scanlines go to bank 0 (offset 0x0000)
@@ -1093,7 +1067,6 @@ void IRAM_ATTR VideoScanout::drawScanline_cga_320x200x4(void *ctx, uint8_t *dst,
   const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
 
   uint8_t *src = output->m_vram + offset;
-#endif
 
   uint32_t *dst32 = (uint32_t *) dst;
   uint32_t *LUT32 = (uint32_t *) output->m_rawPixelLUT;
@@ -1117,15 +1090,10 @@ void IRAM_ATTR VideoScanout::drawScanline_cga_640x200x2(void *ctx, uint8_t *dst,
 
     // Video adapter context
     ScanoutContext *adapter = output->m_context;
-    output->m_startAddress = adapter->startAddress(); // in words
+    output->m_startAddress = adapter->startAddress();
   }
 
-#if 0
-  // Offset 0x0000 for even scan lines (bit 0=0), lines 0, 2, 4...
-  // Offset 0x2000 for odd scan lines  (bit 0=1), lines 1, 3, 5...
-  auto src = output->m_vram + ((scanLine & 1) << 13) + bytesLine * (scanLine >> 1);
-#else
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
 
   // CGA planar banking:
   // - even scanlines go to bank 0 (offset 0x0000)
@@ -1136,7 +1104,6 @@ void IRAM_ATTR VideoScanout::drawScanline_cga_640x200x2(void *ctx, uint8_t *dst,
   const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
 
   uint8_t *src = output->m_vram + offset;
-#endif
 
   uint64_t *dst64 = (uint64_t *) dst;
   uint64_t *LUT64 = (uint64_t *) output->m_rawPixelLUT;
@@ -1160,17 +1127,10 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_320x200x16(void *ctx, uint8_t *d
 
     // Video adapter context
     ScanoutContext *adapter = output->m_context;
-    output->m_startAddress = adapter->startAddress(); // in words
+    output->m_startAddress = adapter->startAddress();
   }
 
-#if 0
-  const uint32_t bank_order[] = {2, 3, 0, 1};
-  const uint32_t bank = bank_order[scanLine & 3];
-  //const uint32_t bank = scanLine & 3;
-  const uint32_t row = scanLine >> 2;
-  auto src = output->m_vram + (bank << 13) + (row * bytesLine);
-#else
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
 
   // Tandy 4‑bank interleaving
   const uint32_t bank_order[] = {2, 3, 0, 1};
@@ -1182,7 +1142,6 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_320x200x16(void *ctx, uint8_t *d
   const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
 
   uint8_t *src = output->m_vram + offset;
-#endif
 
 #if 0
   uint8_t *LUT = output->m_rawPixelLUT;
@@ -1231,17 +1190,10 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_640x200x4(void *ctx, uint8_t *ds
 
     // Video adapter context
     ScanoutContext *adapter = output->m_context;
-    output->m_startAddress = adapter->startAddress(); // in words
+    output->m_startAddress = adapter->startAddress();
   }
 
-#if 0
-  const uint32_t bank_order[] = {2, 3, 0, 1};
-  const uint32_t bank = bank_order[scanLine & 3];
-  //const uint32_t bank = scanLine & 3;
-  const uint32_t row = scanLine >> 2;
-  auto src = output->m_vram + (bank << 13) + (row * bytesLine);
-#else
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
 
   // Tandy 4‑bank interleaving
   const uint32_t bank_order[] = {2, 3, 0, 1};
@@ -1253,7 +1205,6 @@ void IRAM_ATTR VideoScanout::drawScanline_tandy_640x200x4(void *ctx, uint8_t *ds
   const uint32_t offset = (base + bankOffset + lineOffset) & vramMask;
 
   uint8_t *src = output->m_vram + offset;
-#endif
 
   uint32_t *dst32 = (uint32_t *) dst;
   uint32_t *LUT32 = (uint32_t *) output->m_rawPixelLUT;
@@ -1275,12 +1226,12 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_320x200x16(void *ctx, uint8_t *dst
     output->m_frameCounter++;
 
     ScanoutContext *adapter = output->m_context;
-  	output->m_startAddress = adapter->startAddress(); // in words
+  	output->m_startAddress = adapter->startAddress();
   	output->m_colorPlaneEnable = adapter->colorPlaneEnable();
   }
 
   const uint32_t vramMask = output->m_vramSize - 1;
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
   const uint32_t offset = (base + scanLine * bytesLine) & vramMask;
 
   const uint8_t *plane0 = output->m_plane[0] + offset;
@@ -1345,12 +1296,12 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x200x16(void *ctx, uint8_t *dst
     output->m_frameCounter++;
 
     ScanoutContext *adapter = output->m_context;
-  	output->m_startAddress = adapter->startAddress(); // in words
+  	output->m_startAddress = adapter->startAddress();
   	output->m_colorPlaneEnable = adapter->colorPlaneEnable();
   }
 
   const uint32_t vramMask = output->m_vramSize - 1;
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
   const uint32_t offset = (base + scanLine * bytesLine) & vramMask;
 
   // Cache planes locally (register-friendly
@@ -1418,10 +1369,10 @@ void IRAM_ATTR VideoScanout::drawScanline_mda_720x348x2(void *ctx, uint8_t *dst,
 
     // Video adapter context
     ScanoutContext *adapter = output->m_context;
-    output->m_startAddress = adapter->startAddress(); // in words
+    output->m_startAddress = adapter->startAddress();
   }
 
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
 
   // Hercules graphics interleaving: 4 banks of 0x2000 bytes, selected by (y & 3)
   const uint32_t bank = (uint32_t) scanLine & 3;
@@ -1450,12 +1401,12 @@ void IRAM_ATTR VideoScanout::drawScanline_ega_640x350x16(void *ctx, uint8_t *dst
     output->m_frameCounter++;
 
     ScanoutContext *adapter = output->m_context;
-  	output->m_startAddress = adapter->startAddress(); // in words
+  	output->m_startAddress = adapter->startAddress();
   	output->m_colorPlaneEnable = adapter->colorPlaneEnable();
   }
 
   const uint32_t vramMask = output->m_vramSize - 1;
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
   const uint32_t offset = (base + scanLine * bytesLine) & vramMask;
 
   // Cache planes locally (register-friendly
@@ -1520,18 +1471,13 @@ void IRAM_ATTR VideoScanout::drawScanline_mcga_320x200x256(void *ctx, uint8_t *d
 
     // Video adapter context
     ScanoutContext *adapter = output->m_context;
-    output->m_startAddress = adapter->startAddress(); // in words
+    output->m_startAddress = adapter->startAddress();
   }
 
-#if 0
-  auto src = output->m_vram + bytesLine * scanLine;
-#else
-  const uint32_t base = (output->m_startAddress << 1) & vramMask; // in bytes
+  const uint32_t base = (output->m_startAddress << 1) & vramMask; // words to bytes
   const uint32_t offset = (base + pixelsLine * scanLine) & vramMask;
 
   uint8_t *src = output->m_vram + offset;
-#endif
-
   uint8_t *LUT = output->m_rawPixelLUT;
 
 #if 0

@@ -195,7 +195,6 @@ public:
   size_t vramSize() override { return EGA_VRAM_SIZE; }
 
   uint32_t startAddress() override { return m_startAddress; }
-  uint16_t lineOffset() override { return m_lineOffset; }
   uint16_t textPageSize() override { return m_textPageSize; }
 
   bool cursorEnabled() override { return !m_cursorDisable; }
