@@ -120,6 +120,11 @@ The easiest way to install ESPC‑x86 is using the **online firmware flasher**.
 
 > **Note on Mounting:** After mounting a floppy image, the OSD closes and returns to the emulation. However, mounting a hard disk image will automatically trigger a system reboot to apply the changes.
 
+## Screenshots
+
+![Budokan running on ESPC-86](img/budokan.png)
+![Lakers vs Celtics and the NBA Playoffs](img/lakers_vs_celtics.png)
+
 ## Project Status
 
 ESPC‑x86 is under active development.
