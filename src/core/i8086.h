@@ -61,6 +61,17 @@
 #define VIDEOMEM_START 0xA0000
 #define VIDEOMEM_END   0xC0000
 
+// Memory-offset type used to encode "register N" as a fake address
+// (regs_offset + N) into s_memory. On ESP32 this stays int32_t to keep
+// generated code identical to the original. On 64-bit hosts (NATIVE_BUILD),
+// the diff between regs[] (BSS) and s_memory (heap) can exceed 4 GB, so
+// the type must be wide enough to hold a real pointer difference.
+#ifdef NATIVE_BUILD
+typedef intptr_t i8086_addr_t;
+#else
+typedef int32_t  i8086_addr_t;
+#endif
+
 namespace fabgl {
 
 class i8087;
@@ -163,7 +174,7 @@ private:
 
 #if I8086_USE_INLINE_RWMEM
 
-  static inline __attribute__((always_inline)) uint8_t WMEM8(int addr, uint8_t value) {
+  static inline __attribute__((always_inline)) uint8_t WMEM8(i8086_addr_t addr, uint8_t value) {
     if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
       s_writeVideoMemory8(s_context, addr, value);
     } else {
@@ -172,7 +183,7 @@ private:
     return value;
   }
 
-  static inline __attribute__((always_inline)) uint16_t WMEM16(int addr, uint16_t value) {
+  static inline __attribute__((always_inline)) uint16_t WMEM16(i8086_addr_t addr, uint16_t value) {
     if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
       s_writeVideoMemory16(s_context, addr, value);
     } else {
@@ -181,7 +192,7 @@ private:
     return value;
   }
 
-  static inline __attribute__((always_inline)) uint8_t RMEM8(int addr) {
+  static inline __attribute__((always_inline)) uint8_t RMEM8(i8086_addr_t addr) {
     if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
       return s_readVideoMemory8(s_context, addr);
     } else {
@@ -189,7 +200,7 @@ private:
     }
   }
 
-  static inline __attribute__((always_inline)) uint16_t RMEM16(int addr) {
+  static inline __attribute__((always_inline)) uint16_t RMEM16(i8086_addr_t addr) {
     if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
       return s_readVideoMemory16(s_context, addr);
     } else {
@@ -199,10 +210,10 @@ private:
 
 #else
 
-  static uint8_t WMEM8(int addr, uint8_t value);
-  static uint16_t WMEM16(int addr, uint16_t value);
-  static uint8_t RMEM8(int addr);
-  static uint16_t RMEM16(int addr);
+  static uint8_t WMEM8(i8086_addr_t addr, uint8_t value);
+  static uint16_t WMEM16(i8086_addr_t addr, uint16_t value);
+  static uint8_t RMEM8(i8086_addr_t addr);
+  static uint16_t RMEM16(i8086_addr_t addr);
 
 #endif // I8086_USE_INLINE_RWMEM
 

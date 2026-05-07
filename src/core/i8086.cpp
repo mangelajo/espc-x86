@@ -121,11 +121,11 @@ i8087 i8086::s_fpu;
 // Global variable definitions
 static uint8_t    regs[48]   DRAM_ATTR;
 static uint8_t    flags[10]  DRAM_ATTR;
-static int32_t    regs_offset;
+static i8086_addr_t regs_offset;
 static uint8_t    * regs8, i_mod_size, i_d, i_w, raw_opcode_id, xlat_opcode_id, extra, rep_mode, seg_override_en, rep_override_en;
 static uint16_t   * regs16, reg_ip, seg_override;
 static uint32_t   op_source, op_dest, set_flags_type;
-static int32_t    op_to_addr, op_from_addr;
+static i8086_addr_t op_to_addr, op_from_addr;
 
 void *                    i8086::s_context;
 i8086::ReadPort           i8086::s_readPort;
@@ -593,7 +593,7 @@ bool i8086::IRQ(uint8_t interrupt_num)
 
 #if !I8086_USE_INLINE_RWMEM
 
-uint8_t i8086::RMEM8(int addr)
+uint8_t i8086::RMEM8(i8086_addr_t addr)
 {
   if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
     return s_readVideoMemory8(s_context, addr);
@@ -602,7 +602,7 @@ uint8_t i8086::RMEM8(int addr)
   }
 }
 
-uint16_t i8086::RMEM16(int addr)
+uint16_t i8086::RMEM16(i8086_addr_t addr)
 {
   if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
     return s_readVideoMemory16(s_context, addr);
@@ -611,7 +611,7 @@ uint16_t i8086::RMEM16(int addr)
   }
 }
 
-uint8_t i8086::WMEM8(int addr, uint8_t value)
+uint8_t i8086::WMEM8(i8086_addr_t addr, uint8_t value)
 {
   if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
     s_writeVideoMemory8(s_context, addr, value);
@@ -621,7 +621,7 @@ uint8_t i8086::WMEM8(int addr, uint8_t value)
   return value;
 }
 
-uint16_t i8086::WMEM16(int addr, uint16_t value)
+uint16_t i8086::WMEM16(i8086_addr_t addr, uint16_t value)
 {
   if (addr >= VIDEOMEM_START && addr < VIDEOMEM_END) {
     s_writeVideoMemory16(s_context, addr, value);
@@ -758,7 +758,7 @@ static int32_t DAA_DAS()
 
 void i8086::reset()
 {
-  regs_offset = (int32_t)(regs - s_memory);
+  regs_offset = regs - s_memory;
 
   regs8  = (uint8_t *)(s_memory + regs_offset);
   regs16 = (uint16_t *)(s_memory + regs_offset);
@@ -1059,7 +1059,7 @@ void i8086::stepEx(uint8_t const * opcode_stream)
 
   uint8_t i_mod = 0, i_rm = 0, i_reg = 0;
   int32_t op_result = 0;
-  int32_t rm_addr = 0;
+  i8086_addr_t rm_addr = 0;
 
   bool calcIP = true;
 
