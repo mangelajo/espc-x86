@@ -344,7 +344,7 @@ VideoScanout::VideoScanout()
       m_frameCounter(0), m_rawPixelLUT(nullptr), m_cursorGlyph(nullptr),
       m_OSD_showVolume(false), m_callback(nullptr), m_modeLine(nullptr),
       m_width(0), m_height(0), m_context(nullptr), m_vram(nullptr),
-      m_startAddress(0), m_lineOffset(0), m_textPageSize(0), m_activePage(0),
+      m_vramSize(0), m_startAddress(0), m_textPageSize(0), m_activePage(0),
       m_cursorRow(0), m_cursorCol(0), m_cursorEnabled(false), blinkEnabled(false),
       m_rawBorderColor(0), m_colorPlaneEnable(0x0F) {
     m_plane[0] = m_plane[1] = m_plane[2] = m_plane[3] = nullptr;
@@ -378,6 +378,7 @@ void VideoScanout::drawScanline_ega_320x200x16(void*, uint8_t*, int) {}
 void VideoScanout::drawScanline_ega_640x200x16(void*, uint8_t*, int) {}
 void VideoScanout::drawScanline_mda_720x348x2(void*, uint8_t*, int) {}
 void VideoScanout::drawScanline_ega_640x350x16(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_mcga_320x200x256(void*, uint8_t*, int) {}
 
 void drawOSDVolume(VideoScanout*, int, int, int, int, uint8_t*) {}
 void drawOSDPause(VideoScanout*, int, int, int, int, uint8_t*) {}
