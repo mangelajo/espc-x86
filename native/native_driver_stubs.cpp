@@ -331,8 +331,59 @@ void VGADirectController::VScroll(int, Rect &) {}
 } // namespace fabgl
 
 
-// VideoScanout: real implementation is built from src/video/video_scanout.cpp
-// (added to build_src_filter for the native env). No stubs needed here.
+// ═══════════════════════════════════════════════════════════════════════════
+// VideoScanout
+// ═══════════════════════════════════════════════════════════════════════════
+
+#include "video/video_scanout.h"
+
+namespace video {
+
+VideoScanout::VideoScanout()
+    : m_VGADCtrl(nullptr), m_state(State::Stopped), m_currentMode(0),
+      m_frameCounter(0), m_rawPixelLUT(nullptr), m_cursorGlyph(nullptr),
+      m_OSD_showVolume(false), m_callback(nullptr), m_modeLine(nullptr),
+      m_width(0), m_height(0), m_context(nullptr), m_vram(nullptr),
+      m_vramSize(0), m_startAddress(0), m_textPageSize(0), m_activePage(0),
+      m_cursorRow(0), m_cursorCol(0), m_cursorEnabled(false), blinkEnabled(false),
+      m_rawBorderColor(0), m_colorPlaneEnable(0x0F) {
+    m_plane[0] = m_plane[1] = m_plane[2] = m_plane[3] = nullptr;
+}
+VideoScanout::~VideoScanout() {}
+void VideoScanout::init() { m_VGADCtrl = new fabgl::VGADirectController(); }
+void VideoScanout::setSource(ScanoutContext *ctx) { m_context = ctx; }
+void VideoScanout::setMode(int mode) { m_currentMode = mode; }
+void VideoScanout::run() { m_state = State::Running; }
+void VideoScanout::stop() { m_state = State::Stopped; }
+void VideoScanout::pause(bool enable) { m_state = enable ? State::Paused : State::Running; }
+void VideoScanout::updateLUT() {}
+void VideoScanout::setBorder(uint8_t color) { m_rawBorderColor = color; }
+void VideoScanout::showVolume(uint8_t) {}
+uint8_t *VideoScanout::rawSnapshot(uint16_t *w, uint16_t *h) { if(w)*w=0; if(h)*h=0; return nullptr; }
+void VideoScanout::reallocLUT() {}
+void VideoScanout::releaseLUT() {}
+void VideoScanout::reallocFont(FontInfo const *) {}
+void VideoScanout::releaseFont() {}
+void VideoScanout::updateCursorGlyph() {}
+void VideoScanout::removeCursorGlyph() {}
+
+void VideoScanout::drawScanline_text_40x25(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_text_80x25(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_mda_80x25(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_cga_320x200x4(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_cga_640x200x2(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_tandy_320x200x16(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_tandy_640x200x4(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_ega_320x200x16(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_ega_640x200x16(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_mda_720x348x2(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_ega_640x350x16(void*, uint8_t*, int) {}
+void VideoScanout::drawScanline_mcga_320x200x256(void*, uint8_t*, int) {}
+
+void drawOSDVolume(VideoScanout*, int, int, int, int, uint8_t*) {}
+void drawOSDPause(VideoScanout*, int, int, int, int, uint8_t*) {}
+
+} // namespace video
 
 
 // ═══════════════════════════════════════════════════════════════════════════
