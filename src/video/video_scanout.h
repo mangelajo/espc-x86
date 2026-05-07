@@ -93,6 +93,17 @@ public:
 
   uint8_t *rawSnapshot(uint16_t *width, uint16_t *height);
 
+  // Test seam: invoke the active scanline callback directly, bypassing the
+  // VGA controller / DMA / ISR pipeline. Used by native unit tests that
+  // exercise the rendering path without real hardware.
+  // dst must be at least (m_width * m_scanLines) bytes.
+  void renderScanline(int scanLine, uint8_t *dst) {
+    if (m_callback) m_callback(this, dst, scanLine);
+  }
+  int scanLinesPerCallback() const { return m_scanLines; }
+  int width()  const { return m_width; }
+  int height() const { return m_height; }
+
 private:
 
   VGADirectController *m_VGADCtrl;
