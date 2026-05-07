@@ -182,6 +182,8 @@ void test_cpu_hlt() {
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
+extern void run_fpu_tests();
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_cpu_reset_state);
@@ -195,5 +197,8 @@ int main() {
     RUN_TEST(test_cpu_push_pop);
     RUN_TEST(test_cpu_xor_self);
     RUN_TEST(test_cpu_hlt);
+
+    run_fpu_tests();
+
     return UNITY_END();
 }

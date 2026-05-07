@@ -313,9 +313,6 @@ void i8087::execute(uint8_t  raw_opcode_id,
                     uint8_t  i_w,
                     const uint8_t* opcode_stream) {
 
-  printf("<debug> 8087 MATH Coprocessor (opcodes %02X %02X %02X %02X)\n",
-    opcode_stream[0], opcode_stream[1], opcode_stream[2], opcode_stream[3]);
-
   uint8_t opcode = raw_opcode_id; // D8..DF
   uint8_t mod    = i_mod;
   uint8_t reg    = i_reg;
@@ -337,13 +334,15 @@ void i8087::execute(uint8_t  raw_opcode_id,
   }
 
   // -----------------------------------------------------------------------
-  // FSTSW - Store FPU Status Word
+  // FNSTSW / FSTSW — Store FPU Status Word
+  //   DD /7 (mod != 3)         : FNSTSW m16
+  //   DF E0 (mod=3, reg=4,rm=0): FNSTSW AX
   // -----------------------------------------------------------------------
-  if (opcode == 0xDF && reg == 7 && mod != 3) { // FSTSW m16
+  if (opcode == 0xDD && reg == 7 && mod != 3) { // FNSTSW m16
     i8086::WMEM16((int)rm_addr, (uint16_t)m_statusWord);
     return;
   }
-  if (opcode == 0xDF && mod == 3 && reg == 4 && rm == 0) { // FSTSW AX
+  if (opcode == 0xDF && mod == 3 && reg == 4 && rm == 0) { // FNSTSW AX
     i8086::setAX((uint16_t)m_statusWord);
     return;
   }
@@ -367,8 +366,8 @@ void i8087::execute(uint8_t  raw_opcode_id,
     return;
   }
 
-  // FNOP: ESC xx /0, mod=3
-  if (mod == 3 && reg == 0) {
+  // FNOP: D9 D0  (opcode=D9, mod=3, reg=2, rm=0)
+  if (opcode == 0xD9 && mod == 3 && reg == 2 && rm == 0) {
     return;
   }
 
@@ -866,15 +865,6 @@ void i8087::execute(uint8_t  raw_opcode_id,
     m_fpuDP = (uint16_t)(rm_addr & 0xFFFF);
     m_fpuDS = (uint16_t)((rm_addr >> 4) & 0xFFFF);
     store_m80((uint32_t)rm_addr, st(0));
-    pop_st0();
-    return;
-  }
-
-  // FSTP m64real  —  DD /7 (mod != 3)
-  if (opcode == 0xDD && reg == 7 && mod != 3) {
-    m_fpuDP = (uint16_t)(rm_addr & 0xFFFF);
-    m_fpuDS = (uint16_t)((rm_addr >> 4) & 0xFFFF);
-    store_m64((uint32_t)rm_addr, st(0));
     pop_st0();
     return;
   }

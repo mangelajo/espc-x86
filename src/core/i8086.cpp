@@ -2154,7 +2154,7 @@ void i8086::stepEx(uint8_t const * opcode_stream)
     }
 
     case 69: // 8087 MATH Coprocessor (ESC D8–DF)
-      //s_fpu.execute(raw_opcode_id, i_mod, i_reg, i_rm, (uint32_t) rm_addr, i_w, opcode_stream);
+      s_fpu.execute(raw_opcode_id, i_mod, i_reg, i_rm, (uint32_t) rm_addr, i_w, opcode_stream);
       break;
 
     /*
